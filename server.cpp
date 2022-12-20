@@ -55,6 +55,8 @@ while(true):
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <thread>
+#include <sstream>
+#include <vector>
 
 #define PORT 6116 //the port to bind & listen on
 #define MAX_CLIENTS 25 // max allowed number of active clients
@@ -67,6 +69,25 @@ while(true):
  */
 static float compute_time_out(int n) {
     return ONE_CLIENT_TIME_OUT/n;
+}
+
+std::vector<std::string> get_words(std::string line){
+    std::vector<std::string> words;
+    std::string word;
+    for (char character : line){
+        if (character == ' '){
+            if (word.length()!=0) {
+                words.push_back(word);
+                word = "";
+            }
+        }
+        else{
+            word += character;
+        }
+    }
+    if (word.length()!=0)
+        words.push_back(word);
+    return words;
 }
 
 int worker(int* active_connections, int fd, std::mutex lock){
@@ -129,9 +150,10 @@ int worker(int* active_connections, int fd, std::mutex lock){
                 buffer_offset++;//skip '\r
                 break;
             }
-            request.push_back(next_char);
+            request+=next_char;
         }
-        if
+        std::vector<std::string> request_words = get_words(request);
+        string command = request_words.at(0);
     }
 }
 
