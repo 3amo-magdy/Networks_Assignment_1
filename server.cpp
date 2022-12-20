@@ -153,7 +153,8 @@ int worker(int* active_connections, int fd, std::mutex lock){
             request+=next_char;
         }
         std::vector<std::string> request_words = get_words(request);
-        string command = request_words.at(0);
+        std::string command = request_words.at(0);
+        
     }
 }
 
