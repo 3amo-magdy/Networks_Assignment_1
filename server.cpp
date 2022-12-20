@@ -59,7 +59,7 @@ while(true):
 #define PORT 6116 //the port to bind & listen on
 #define MAX_CLIENTS 25 // max allowed number of active clients
 #define ONE_CLIENT_TIME_OUT 10.0 // the time_out duration if there's only one client connected in seconds
-
+#define CHUNK_SIZE 1024
 /**
  * computes the duration before time_out based on the number of concurrent connections
  * @param n the number of active connections
@@ -70,6 +70,15 @@ static float compute_time_out(int n) {
 }
 
 int worker(int* active_connections, int fd, std::mutex lock){
+    /**
+     * modes:
+     * 0: waiting for request
+     * 1: downloading a chunk data onto a file
+     */
+    int mode = 0;
+
+    //file x
+
     while(true){
         //critical section - on resource: active_connections
         //compute the duration based on the heuristic
@@ -80,13 +89,14 @@ int worker(int* active_connections, int fd, std::mutex lock){
         //build the timeval struct to call select
         timeval time_out{};
         time_out.tv_sec = (int)duration;
-        time_out.tv_usec = (long)((duration- (int)duration)*1000)*1000;
+        time_out.tv_usec = (long)((duration - (int)duration)*1000)*1000;
         //set up the parameters for select
         fd_set input;
         FD_ZERO(&input);
         FD_SET(fd, &input);
         int can_read = -1;
-        can_read = select(fd + 1, &input, NULL, NULL, &time_out);
+        //wait till time_out or something is there to read
+        can_read = select(fd + 1, &input, nullptr, nullptr, &time_out);
         if (can_read == -1) {
             perror("select err in worker");
             exit(1);
@@ -99,13 +109,29 @@ int worker(int* active_connections, int fd, std::mutex lock){
             close(fd);
             return 0;
         }
-        //illegal state - shall never happen -:
+        //illegal state -must never happen -:
         if (!FD_ISSET(fd, &input)){
             perror("illegal state!");
             exit(1);
         }
         //there's something to read:
+        //read the chunk:
+        char* buffer;
+        int buffer_offset = 0;
 
+
+        //if in mode [waiting for a request]
+        //parse the chunk into -> request, file_path, content_length(in case of post)
+        std::string request = "";
+        for (int i = 0; ; i++) {
+            char next_char = buffer[buffer_offset++];
+            if(next_char=='\n'){
+                buffer_offset++;//skip '\r
+                break;
+            }
+            request.push_back(next_char);
+        }
+        if
     }
 }
 
