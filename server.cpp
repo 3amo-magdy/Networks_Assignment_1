@@ -57,11 +57,17 @@ while(true):
 #include <thread>
 #include <sstream>
 #include <vector>
-
+#include <fstream>
+#include <cstring>
+#include "common.h"
 #define PORT 6116 //the port to bind & listen on
 #define MAX_CLIENTS 25 // max allowed number of active clients
 #define ONE_CLIENT_TIME_OUT 10.0 // the time_out duration if there's only one client connected in seconds
 #define CHUNK_SIZE 1024
+static const std::string error_code = "HTTP/1.1 500 Internal Server Error\r\n";
+static const std::string success_code = "HTTP/1.1 200 OK\r\n";
+static const std::string clength_header = "content-length: ";
+
 /**
  * computes the duration before time_out based on the number of concurrent connections
  * @param n the number of active connections
@@ -71,23 +77,10 @@ static float compute_time_out(int n) {
     return ONE_CLIENT_TIME_OUT/n;
 }
 
-std::vector<std::string> get_words(std::string line){
-    std::vector<std::string> words;
-    std::string word;
-    for (char character : line){
-        if (character == ' '){
-            if (word.length()!=0) {
-                words.push_back(word);
-                word = "";
-            }
-        }
-        else{
-            word += character;
-        }
-    }
-    if (word.length()!=0)
-        words.push_back(word);
-    return words;
+int min(int a, int b) {
+    if(a<=b)
+        return a;
+    return b;
 }
 
 int worker(int* active_connections, int fd, std::mutex lock){
@@ -97,8 +90,9 @@ int worker(int* active_connections, int fd, std::mutex lock){
      * 1: downloading a chunk data onto a file
      */
     int mode = 0;
-
-    //file x
+    int size_to_read = 0;
+    std::string command;
+    std::string file_path;
 
     while(true){
         //critical section - on resource: active_connections
@@ -136,25 +130,148 @@ int worker(int* active_connections, int fd, std::mutex lock){
             exit(1);
         }
         //there's something to read:
-        //read the chunk:
-        char* buffer;
+        //read the chunk (unblocking after select()):
+        char* buffer= (char*) malloc(CHUNK_SIZE);
         int buffer_offset = 0;
-
-
-        //if in mode [waiting for a request]
-        //parse the chunk into -> request, file_path, content_length(in case of post)
-        std::string request = "";
-        for (int i = 0; ; i++) {
-            char next_char = buffer[buffer_offset++];
-            if(next_char=='\n'){
-                buffer_offset++;//skip '\r
-                break;
-            }
-            request+=next_char;
+        int buffer_size = read(fd,buffer,CHUNK_SIZE);
+        if(buffer_size==0){
+            //close connection
+            lock.lock();
+            *active_connections = *active_connections - 1;
+            lock.unlock();
+            close(fd);
+            return 0;
         }
-        std::vector<std::string> request_words = get_words(request);
-        std::string command = request_words.at(0);
-        
+        if(buffer_size==-1){
+            perror("buffer reading err | worker");
+            exit(1);
+        }
+        //if in mode [waiting for a request]
+        if(mode==0) {
+            //parse the chunk into -> request, file_path, content_length(in case of post)
+            std::string request = "";
+            for (int i = 0;; i++) {
+                char next_char = buffer[buffer_offset++];
+                if (next_char == '\r') {
+                    buffer_offset++;//skip '\n
+                    break;
+                }
+                request += next_char;
+            }
+            std::vector<std::string> request_words = get_words(request);
+            command = request_words.at(0);
+            file_path = request_words.at(1);
+            if (command == "GET") {
+                std::ifstream in(file_path,std::ios::binary);
+                if(in.fail()){
+                    //send error
+                    write(fd,error_code.c_str(), error_code.size());
+                    perror("failed to open the file | executing POST");
+                }
+                //allocate the chunk to be sent in memory
+                char* chunk = (char*)(malloc(CHUNK_SIZE));
+                strncpy(chunk, (success_code.c_str()),success_code.size());
+                //int to track the current chunk size
+                int filled = success_code.size();
+
+                //get file size
+                in.seekg(std::ios::end);
+                int file_size = in.tellg();
+                in.seekg(std::ios::beg);
+
+                //write content-length header:
+                strncpy(chunk,clength_header.c_str(),clength_header.size());
+                filled+=(int)clength_header.size();
+                for(int i=3;i>=0;i--){
+                    chunk[filled++]=(char)((file_size >> 3*i)&0xFF);
+                }
+                //write "\r\n" at end of header section
+                chunk[filled++]='\r';
+                chunk[filled++]='\n';
+                //write file data onto chunks and keep sending chunks till the whole file is sent
+                int file_bytes_copied = 0;
+                while (file_bytes_copied < file_size && !in.eof()){
+                    if(filled==0){
+                        memset(chunk,'\0',CHUNK_SIZE);
+                    }
+                    int file_bytes_to_copy = min(CHUNK_SIZE-filled, file_size - file_bytes_copied);
+                    in.read(chunk, file_bytes_to_copy);
+                    file_bytes_copied+=file_bytes_to_copy;
+                    write(fd,chunk,file_bytes_to_copy+filled);
+                    filled = 0;
+                }
+            }
+            else if (command == "POST") {
+                std::string clength_header_value;
+                for (int i = 0;; i++) {
+                    char next_char = buffer[buffer_offset++];
+                    if (next_char == '\r') {
+                        buffer_offset++;//skip '\n'
+                        break;
+                    }
+                    clength_header_value += next_char;
+                }
+                buffer_offset+=2;//skip end of header section '\r\n'
+                std::vector<std::string> content_length_words = get_words(request);
+                if (content_length_words.size() != 2 || content_length_words.at(0) != "content-length:") {
+                    write(fd,error_code.c_str(), error_code.size());
+                    perror("error parsing POST");
+                }
+                size_to_read = stoi(content_length_words.at(1));
+                //file writing:
+                std::ofstream out(file_path, std::ios::binary);
+                if (out.fail()) {
+                    write(fd,error_code.c_str(), error_code.size());
+                    perror("failed to open the file | executing POST");
+                }
+                out.write(buffer, buffer_size - buffer_offset);
+                if (out.bad()) {
+                    write(fd,error_code.c_str(), error_code.size());
+                    out.close();
+                    perror("error writing | executing POST");
+                }
+                out.close();
+                mode = 1;
+            } else {
+                write(fd,error_code.c_str(), error_code.size());
+                perror("unsupported command");
+            }
+        }
+        else if(mode==1){
+            bzero(buffer,CHUNK_SIZE);
+            int chunk_bytes_read = read(fd,buffer,sizeof(buffer));
+            if(chunk_bytes_read==0){
+                //close connection
+                lock.lock();
+                *active_connections = *active_connections - 1;
+                lock.unlock();
+                close(fd);
+                return 0;
+            }
+            if(chunk_bytes_read==-1){
+                perror("buffer reading err | worker mode = 1");
+                exit(1);
+            }
+            size_to_read-=chunk_bytes_read;
+            if(size_to_read<0){
+                perror("wrong content-length received from client !");
+            }
+            if(size_to_read==0){
+                mode = 0;
+            }
+            //write append onto file
+            std::ofstream out(file_path, std::ios::binary);
+            if (out.fail()) {
+                perror("failed to open the file | executing POST mode 1 !!!");
+            }
+            out.write(buffer, chunk_bytes_read);
+            if (out.bad()) {
+                out.close();
+                perror("failed to write to the file | executing POST mode 1 !!!");
+            }
+            out.close();
+
+        }
     }
 }
 
