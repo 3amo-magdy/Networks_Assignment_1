@@ -31,5 +31,18 @@ std::vector<std::string> get_words(std::string line){
     return words;
 }
 
+static void send_onto_socket(std::vector<std::string> messages, int fd)
+{
+    char *chunk = (char *)(malloc(CHUNK_SIZE));
+    int used_bytes = 0;
+    for (std::string msg : messages)
+    {
+        strncpy(chunk + used_bytes, msg.c_str(), msg.size());
+        used_bytes += msg.size();
+    }
+    write(fd, chunk, used_bytes);
+    free(chunk);
+}
+
 
 #endif //NETWORKS_ASSIGNMENT_1_COMMON_H

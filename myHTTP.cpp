@@ -12,7 +12,9 @@ class myHTTP{
     std::string argument;
     std::string http_version;
     std::vector<std::string> headers_lines;
+    int content_length = -1;
     char* body_start;
+    int body_size;
 
     void parseHTTP(char* http_msg, int msgsize){
         int buffer_offset = 0;
@@ -22,6 +24,12 @@ class myHTTP{
             if (next_char == '\r') {
                 buffer_offset++;//skip '\n'
                 headers_lines.push_back(header_line);
+                if(content_length == -1){
+                    std::vector<std::string> header_segements = get_words(header_line);
+                    if(header_segements.at(0)=="content-Length:"){
+                        content_length = std::stoi(header_segements.at(1));
+                    }
+                }
                 header_line = "";
                 continue;
             }
@@ -29,6 +37,7 @@ class myHTTP{
         }
         buffer_offset+=3;
         body_start = http_msg + buffer_offset;
+        body_size = msgsize - buffer_offset;
         std::vector<std::string> cmd_words = get_words(headers_lines.at(0));
         command = cmd_words.at(0);
         argument = cmd_words.at(1);
