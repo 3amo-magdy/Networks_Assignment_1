@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <vector>
 
+#define CHUNK_SIZE 1024
+
 std::vector<std::string> get_words(std::string line){
     std::vector<std::string> words;
     std::string word;
