@@ -83,7 +83,7 @@ int min(int a, int b) {
     return b;
 }
 
-int worker(int* active_connections, int fd, std::mutex lock){
+int worker(int* active_connections, int fd, std::mutex * lock){
     /**
      * modes:
      * 0: waiting for request
@@ -98,9 +98,9 @@ int worker(int* active_connections, int fd, std::mutex lock){
         //critical section - on resource: active_connections
         //compute the duration based on the heuristic
         float duration;
-        lock.lock();
+        (lock)->lock();
         duration = compute_time_out(*active_connections);
-        lock.unlock();
+        lock->unlock();
         //build the timeval struct to call select
         timeval time_out{};
         time_out.tv_sec = (int)duration;
@@ -118,9 +118,9 @@ int worker(int* active_connections, int fd, std::mutex lock){
         }
         //if time_out occurred:
         else if (can_read == 0){
-            lock.lock();
+            lock->lock();
             *active_connections = *active_connections - 1;
-            lock.unlock();
+            lock->unlock();
             close(fd);
             return 0;
         }
@@ -136,9 +136,9 @@ int worker(int* active_connections, int fd, std::mutex lock){
         int buffer_size = read(fd,buffer,CHUNK_SIZE);
         if(buffer_size==0){
             //close connection
-            lock.lock();
+            lock->lock();
             *active_connections = *active_connections - 1;
-            lock.unlock();
+            lock->unlock();
             close(fd);
             return 0;
         }
@@ -242,9 +242,9 @@ int worker(int* active_connections, int fd, std::mutex lock){
             int chunk_bytes_read = read(fd,buffer,sizeof(buffer));
             if(chunk_bytes_read==0){
                 //close connection
-                lock.lock();
+                lock->lock();
                 *active_connections = *active_connections - 1;
-                lock.unlock();
+                lock->unlock();
                 close(fd);
                 return 0;
             }
@@ -300,8 +300,8 @@ int main(){
     server_addr_in.sin_family = AF_INET;
     server_addr_in.sin_addr.s_addr = INADDR_ANY;
     server_addr_in.sin_port = htons(PORT);
-    server_addr_in.sin_zero =
-    wmemset(reinterpret_cast<wchar_t *>(&(server_addr_in.sin_zero)), 0, sizeof(server_addr_in.sin_zero));
+    memset((&(server_addr_in.sin_zero)), '\0', sizeof(server_addr_in.sin_zero));
+
     //bind the socket to the ip & port
     if (bind(listener, (struct sockaddr*) &server_addr_in, sizeof(server_addr_in)) == -1) {
         perror("bind err");
@@ -312,19 +312,21 @@ int main(){
         perror("listen");
         exit(1);
     }
-    //the server loop
+    //the server loop (forever running)
     while(true){
         // handle new connections
         addrlen = sizeof(client_addr_in);
         int new_fd = -1;
-        new_fd = accept(listener, (struct sockaddr*) &client_addr_in, (socklen_t*)(&addrlen))
+        new_fd = accept(listener, (struct sockaddr*) &client_addr_in, (socklen_t*)(&addrlen));
         if (new_fd == -1) {
             perror("accept err");
         } else {
             printf("new connection from %s on fd %d\n", inet_ntoa(client_addr_in.sin_addr), new_fd);
-            std::thread worker = new std::thread()
+            std::thread worker_t(worker,&active_connections,new_fd,&lock);
+            worker_t.detach();
         }
     }
+    return 0;
 }
 
 
