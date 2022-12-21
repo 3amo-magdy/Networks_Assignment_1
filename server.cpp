@@ -60,6 +60,7 @@ while(true):
 #include <fstream>
 #include <cstring>
 #include "common.h"
+#include <iostream>
 #define PORT 6116 //the port to bind & listen on
 #define MAX_CLIENTS 25 // max allowed number of active clients
 #define ONE_CLIENT_TIME_OUT 10.0 // the time_out duration if there's only one client connected in seconds
@@ -146,6 +147,8 @@ int worker(int* active_connections, int fd, std::mutex * lock){
             perror("buffer reading err | worker");
             exit(1);
         }
+        //print all what was received:
+        std::cout<<buffer<<'\n';
         //if in mode [waiting for a request]
         if(mode==0) {
             //parse the chunk into -> request, file_path, content_length(in case of post)
@@ -161,6 +164,8 @@ int worker(int* active_connections, int fd, std::mutex * lock){
             std::vector<std::string> request_words = get_words(request);
             command = request_words.at(0);
             file_path = request_words.at(1);
+	    std::cout<<command<<'\n';
+		std::cout<<file_path<<'\n';
             if (command == "GET") {
                 std::ifstream in(file_path,std::ios::binary);
                 if(in.fail()){
@@ -233,8 +238,9 @@ int worker(int* active_connections, int fd, std::mutex * lock){
                 out.close();
                 mode = 1;
             } else {
+		perror("unsupported command");
                 write(fd,error_code.c_str(), error_code.size());
-                perror("unsupported command");
+                
             }
         }
         else if(mode==1){
@@ -322,6 +328,7 @@ int main(){
             perror("accept err");
         } else {
             printf("new connection from %s on fd %d\n", inet_ntoa(client_addr_in.sin_addr), new_fd);
+            active_connections++;
             std::thread worker_t(worker,&active_connections,new_fd,&lock);
             worker_t.detach();
         }
