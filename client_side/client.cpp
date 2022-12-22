@@ -1,28 +1,16 @@
-#include <stdlib.h>
+#include <cstdlib>
 #include <iostream>
-#include <stdio.h>
-#include <string.h>
-#include <pthread.h>
+#include <cstring>
 #include <fstream>
-#include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <netdb.h>
-#include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <iostream>
 #include <bits/stdc++.h>
-#include "common.h"
-#include <sys/socket.h>
-#include <netinet/in.h>
+#include "../common/common.h"
 #include <arpa/inet.h>
-#include <iostream>
 #include <sstream>
 #include <vector>
-
+#include "../common/myHTTP.cpp"
 using namespace std;
 
 #define PORT 3490       // the port client will be connecting to
@@ -40,7 +28,7 @@ typedef struct query{
     int port_num_used;
     // string dest_ip_number;
     // int dest_port_number;
-};
+} query;
 vector<query> queries;
 
 
@@ -59,7 +47,7 @@ void validate_read_line(int numArgs, vector<string> args){
     string command = args[0];
     string file_path = args[1];
     string host_name = args[2];
-    string port_num_str = "";
+    string port_num_str;
 
     if(numArgs == 4) port_num_str=args[3];
     if(command != "client_get" && command != "client_post"){
@@ -75,129 +63,142 @@ void validate_read_line(int numArgs, vector<string> args){
         }
         // dest_port_number = temp_port_num;
     }
-    
-
-
 }
 
 
+//              GET
+//write body to file
+// bytes still missing = size - body bytes
+// while loop
+//          keep recv until no other bytes to be read
+//          output to file
+// close all files
 
 
 
+//          POST
+//open file
+//get file size
+// content_sent = file size
+//send ->"Content-Length: # \r\n\r\n"
+// while(content length>0)
+//      read CHUNKMAX bytes from file (or less if content length<CHUNKMAX)
+//      send MAXCHUNK bytes you can send    ??? But, should I write whole buffer and depend that he will stop ? or write only bytes I wanna send
+//      content length -= MAXCHNK
 
 
 
-void process_query(query q){
+void process_get(query q){
+    string request = "GET /"+q.file_path+" HTTP/1.1\r\n\r\n";
 
-
-    //formulate message
-    string request = "";
-    if(q.get) request = "GET /"+q.file_path+" HTTP/1.1\r\n\r\n";
-    else request = "POST /"+q.file_path+" HTTP/1.1\r\n\r\n";
-
-    //send http request
     if(send(socketfd,request.c_str(),request.size(),0) == -1){
         cout<<"error sending request"<<endl;
         exit(1);
     }
-    
-    if(q.get){
-        //first chunk 
-        char buff[CHUNK_SIZE];
-        memset(buff,0,CHUNK_SIZE);
-        int read_bytes = recv(socketfd,buff,CHUNK_SIZE,0);
-        cout << buff <<'\n';
-
-        //u could give myHTTP object a shot (just use the headerlines of it)
-        cout << "tony look here !, ctrl+f (look)"<<'\n';
-
-
-        char c1 = buff[0];
-        char c2 = buff[1];
-        int ind = 2;
-        int read_lines_to_read_header=2;
-        string code_message="" +c1+c2;
-        while (c1 != '\r' && c2!='\n' && ind<read_bytes)
-        {
-            c1=c2;
-            c2=buff[ind];
-            ind++;
-            code_message = code_message+c2;
-        }
+    //first chunk
+    char buff[CHUNK_SIZE];
+    memset(buff,0,CHUNK_SIZE);
+    int read_bytes = recv(socketfd,buff,CHUNK_SIZE,0);
+    cout << buff <<'\n';
+    myHTTP parser;
+    cout<<"READ bytes of " << read_bytes<<"\n";
+    if(!parser.parseHTTP(buff,read_bytes))
+    {
+        cout<<"error parsing."<<"\n";
+        exit(1);
+    }
+    string code_message = parser.headers_lines.at(0);
+    if(parser.argument_or_code!="200"){
+        // we didn't receive the ok message
+        cout<<"ERROR READING OK MESSAGE"<<"\n";
         cout<<code_message<<endl;
-        if(code_message!="HTTP/1.1 200 OK\r\n"){
-            // we didn't receive the ok message
-            cout<<code_message<<endl;
-            exit(1);
-        }
+        exit(1);
+    }
+    int length = parser.content_length;
+    cout<<length<<" heeere \n";
+    char* body_start = parser.body_start;
 
-        string header_data ="";
-        while (ind <read_bytes){
-            header_data= header_data+buff[ind++];
-        }
+    fstream myFile;
+    string file_new_name = "out_" + q.file_path;
+    myFile.open (file_new_name, ofstream::binary | ofstream::out | ofstream::trunc);
+    myFile.write(body_start,parser.body_size);
+    int bytes_missing = length - parser.body_size;
+    cout<<"\nBYTES MISSING "<<bytes_missing<<"\n";
+    while (bytes_missing>0)
+    {
+        char temp_buff[CHUNK_SIZE];
+        memset(temp_buff,'\0',CHUNK_SIZE);
+        int bytes = recv(socketfd,temp_buff,CHUNK_SIZE,0);
+        bytes_missing-=bytes;
 
-        int end_header_pos = header_data.find("\r\n\r\n");
-        string headers = header_data.substr(0,end_header_pos);
-        string body = header_data.substr(end_header_pos+5);
-
-        char* headers_copy = strcpy(headers_copy,headers.c_str());
-        vector<string> header_vec ;
-        char* token;
-        token = strtok(headers_copy, "\r\n"); 
-        while (token != NULL)  
-        {  
-            char* header;
-            strcpy(header,token);
-            header_vec.push_back(header);
-            token = strtok (NULL, "\r\n");  
-        }  
-
-        string size="";
-        int size_int = -1;
-        for(int i=0;i<header_vec.size();i++){
-            vector<string> divided = get_words(header_vec[i]);
-            if(divided[0]=="Content-Length:"){
-                size = divided[1];
-                size_int = stoi(size);
-            }
-        }
+        cout<<"\nByt received "<<temp_buff<<"\n";
+        cout<< "bytes read: "<<bytes<<"\n\n";
+        if(bytes==0) break;
 
 
-        memset(buff,0,CHUNK_SIZE);
+        myFile.write(temp_buff,bytes);
+    }
+    myFile.close();
 
-        fstream myFile;
-        string file_new_name = "out.txt";
-        myFile.open (file_new_name, ios::binary);
-        myFile.write(body.c_str(),body.length());
-        int bytes_missing = size_int - body.length();
-        while (bytes_missing>0)
+}
+
+
+void process_post(query q){
+    string request= "POST /"+q.file_path+" HTTP/1.1\r\n";
+    cout<<q.file_path<<'\n';
+    ifstream in(q.file_path, ifstream::ate | ifstream::binary);
+    // get file size
+    int file_size = in.tellg();
+    in.seekg(0, std::ios_base::beg);
+    char *chunk = (char *)(malloc(CHUNK_SIZE));
+    memset(chunk, 0, CHUNK_SIZE);
+
+    if (in.fail())
+    {
+        cout<<"error opening file in post\n";
+        in.close();
+        return;
+    }
+    std::vector<std::string> request_headers;
+    request_headers.push_back(request);
+    request_headers.push_back("Content-Length: "+ to_string(file_size));
+    request_headers.emplace_back("\r\n");
+    request_headers.emplace_back("\r\n");
+
+
+    char* data_pointer_in_chunk = strscpy(chunk,request_headers);
+    bool chunk_should_be_empty = false;
+
+    int file_bytes_copied = 0;
+    while (file_bytes_copied < file_size && !in.eof())
+    {
+        if (chunk_should_be_empty)
         {
-            char temp_buff[CHUNK_SIZE];
-            int bytes = recv(socketfd,temp_buff,CHUNK_SIZE,0);
-            bytes_missing-=bytes;
-            myFile.write(temp_buff,bytes);
+            memset(chunk, 0, CHUNK_SIZE);
         }
-        
-        myFile.close();
-        //write body to file
-        // bytes still missing = size - body bytes
-        // while loop
-        //          keep recv until no other bytes to be read
-        //          output to file
-        // close all files
+        int file_bytes_to_copy = min((CHUNK_SIZE - (data_pointer_in_chunk - chunk)), (long)(file_size - file_bytes_copied));
+        in.read(data_pointer_in_chunk,file_bytes_to_copy);
+        data_pointer_in_chunk += file_bytes_to_copy;
+        int actual = write(socketfd, chunk, data_pointer_in_chunk - chunk);
+        file_bytes_copied += actual;
+        data_pointer_in_chunk -= actual;
+        chunk_should_be_empty = (data_pointer_in_chunk == chunk);
+    }
+    // free resources
+    in.close();
+    free(chunk);
+}
+
+
+void process_query(query q){
+    //formulate message
+    string request;
+    if(q.get) request = "GET /"+q.file_path+" HTTP/1.1\r\n\r\n";
+    else request = "POST /"+q.file_path+" HTTP/1.1\r\n";
+    if(q.get){
+        process_get(q);
     }else{
-        //open file 
-        //get file size 
-        // content_sent = file size
-        //send ->"Content-Length: # \r\n\r\n"        
-        // while(content length>0)
-        //      read CHUNKMAX bytes from file (or less if content length<CHUNKMAX)
-        //      send MAXCHUNK bytes you can send    ??? But, should I write whole buffer and depend that he will stop ? or write only bytes I wanna send
-        //      content length -= MAXCHNK 
-        //
-
-
-
+        process_post(q);
     }   
 }
 
@@ -215,22 +216,13 @@ int main(int argc, char** argv)
     } else {
         string port_str(argv[2]);
         int temp_port_num = std::stoi(port_str);
-
         if(temp_port_num <= 1000) { //error or kernel reserved ports 
             cout<<"Wrong/unaccepted port number. "<<endl;
             exit(1);
         }
         server_port_number=temp_port_num;
-
-        // if(argv[1]=="localhost") server_ip="127.0.0.1";
-        // else 
         server_ip=argv[1];
-        // server_ip = argv[1];
     }
-
-
-
-
 
     int sockfd;
     //create file descriptor for communication
@@ -281,6 +273,10 @@ int main(int argc, char** argv)
             i++;
             q.file_path=words[1];
             q.host_name=words[2];
+            if(q.file_path[0]=='/'){
+                q.file_path = q.file_path.substr(1,q.file_path.size());
+            }
+
             if(words.size()==4){
                 int temp_port_num = stoi(words[3]);
                 if(temp_port_num <= 1000) { //error or kernel reserved ports 

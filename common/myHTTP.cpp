@@ -30,7 +30,8 @@ class myHTTP{
                 headers_lines.push_back(header_line);
                 if(content_length == -1){
                     std::vector<std::string> header_segements = get_words(header_line);
-                    if(header_segements.at(0)=="content-Length:"){
+                    std::cout<<"---" <<header_segements.at(0)<<"***" <<std::endl;
+                    if(header_segements.at(0)=="Content-Length:"){
                         content_length = std::stoi(header_segements.at(1));
                     }
                 }
@@ -41,6 +42,13 @@ class myHTTP{
         }
         if(header_line.size()>0){
             headers_lines.push_back(header_line);
+        }
+        if(content_length == -1){
+            std::vector<std::string> header_segements = get_words(header_line);
+            std::cout<<"---" <<header_segements.at(0)<<"***" <<std::endl;
+            if(header_segements.at(0)=="Content-Length:"){
+                content_length = std::stoi(header_segements.at(1));
+            }
         }
         buffer_offset+=4;
         body_start = http_msg + buffer_offset;

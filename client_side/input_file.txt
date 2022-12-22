@@ -1,0 +1,2 @@
+client_get server_img.png localhost 6116
+client_post client_img.png localhost 6116

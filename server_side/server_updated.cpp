@@ -59,7 +59,8 @@ while(true):
 #include <vector>
 #include <fstream>
 #include <cstring>
-#include "myHTTP.cpp"
+#include "../common/common.h"
+#include "../common/myHTTP.cpp"
 #include <iostream>
 #define MAX_CLIENTS 20           // max allowed number of active clients
 #define MAX_ONE_CLIENT_TIME_OUT 40.0 // the time_out duration if there's only one client connected, in seconds
@@ -77,6 +78,8 @@ static const std::string parse_err = "parsing error | invalid http request\r\n";
 static const std::string file_received = "the file's chunk has been uploaded to the server successfully\r\n";
 
 static int PORT = 6116;               // the port to bind & listen on
+
+
 
 /**
  * computes the duration before time_out based on the number of concurrent connections
@@ -295,6 +298,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
             {
                 size_to_read = parser.content_length;
                 // file opening:
+                
                 std::ofstream out(file_path, std::ios::binary);
                 if (out.fail())
                 {

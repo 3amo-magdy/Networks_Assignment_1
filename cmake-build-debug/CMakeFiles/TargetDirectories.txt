@@ -1,3 +1,3 @@
-/home/amr/CLionProjects/Networks_Assignment_1/cmake-build-debug/CMakeFiles/Networks_Assignment_1.dir
-/home/amr/CLionProjects/Networks_Assignment_1/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/amr/CLionProjects/Networks_Assignment_1/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/t-ony/Documents/Network/assignment1/cmake-build-debug/CMakeFiles/Networks_Assignment_1.dir
+/home/t-ony/Documents/Network/assignment1/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/t-ony/Documents/Network/assignment1/cmake-build-debug/CMakeFiles/rebuild_cache.dir
