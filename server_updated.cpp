@@ -91,6 +91,55 @@ int min(int a, int b)
     return b;
 }
 
+void handle_get_request(std::string file_path, int fd){
+                std::ifstream in(file_path, std::ios::binary);
+                char *chunk = (char *)(malloc(CHUNK_SIZE));
+                if (in.fail())
+                {
+                    send_open_fail_err(fd);
+                    in.close();
+                    return;
+                }
+                std::vector<std::string> response_headers;
+                //append success code
+                response_headers.push_back(success_code);
+
+                //append Content-Length header token
+                response_headers.push_back(clength_header);
+
+                // write content-length value:
+                // get file size
+                int file_size = fsize(&in);
+                std::string body_size_str = std::to_string(file_size);
+                response_headers.push_back(body_size_str);
+
+                // write an empty line at end of header
+                response_headers.push_back(empty_line);
+
+                // write an empty line at end of header section
+                response_headers.push_back(empty_line);
+                char* data_pointer_in_chunk = strscpy(chunk,response_headers);
+
+                bool chunk_should_be_empty = false;
+
+                // write file data onto chunks and keep sending chunks till the whole file is sent
+                int file_bytes_copied = 0;
+                while (file_bytes_copied < file_size && !in.eof())
+                {
+                    if (chunk_should_be_empty)
+                    {
+                        memset(chunk, 0, CHUNK_SIZE);
+                    }
+                    int file_bytes_to_copy = min(CHUNK_SIZE - (data_pointer_in_chunk - chunk), (file_size - file_bytes_copied));
+                    data_pointer_in_chunk = fcpy(data_pointer_in_chunk,&in,file_bytes_to_copy);
+                    int actual = write(fd, chunk, data_pointer_in_chunk - chunk);
+                    file_bytes_copied += actual;
+                    data_pointer_in_chunk -= actual;
+                // free resources
+                in.close();
+                free(chunk);
+}
+
 int worker(int *active_connections, int fd, std::mutex *lock)
 {
     /**
@@ -208,65 +257,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
             }
             if (command == "GET")
             {
-                std::ifstream in(file_path, std::ios::binary);
-                char *chunk = (char *)(malloc(CHUNK_SIZE));
-                if (in.fail())
-                {
-                    // send open_fail error
-                    strncpy(chunk, error_code.c_str(), error_code.size());
-                    strncpy(chunk + error_code.size(), empty_line.c_str(), empty_line.size());
-                    strncpy(chunk + error_code.size() + empty_line.size(), open_failc_str(), open_fail_err.size());
-                    write(fd, chunk, error_code.size() + empty_line.size());
-                    // perror("failed to open the file | executing GET");
-                    // free resources
-                    free(chunk);
-                    in.close();
-                    continue;
-                }
-                // allocate the in-memory chunk to be sent in socket
-                strncpy(chunk, (success_code.c_str()), success_code.size());
-                // int to track the current chunk size
-                int filled = success_code.size();
-
-                // get file size
-                in.seekg(std::ios::end);
-                int file_size = in.tellg();
-                in.seekg(std::ios::beg);
-
-                // write content-length header:
-                strncpy(chunk + filled, clength_header.c_str(), clength_header.size());
-                filled += (int)clength_header.size();
-
-                // write content-length value:
-                std::string body_size_str = std::to_string(file_size);
-                strncpy(chunk + filled, body_size_str.c_str(), body_size_str.size());
-                filled += body_size_str.size();
-
-                // write an empty line at end of header
-                strncpy(chunk + filled, empty_line.c_str(), empty_line.size());
-                filled += empty_line.size();
-
-                // write an empty line at end of header section
-                strncpy(chunk + filled, empty_line.c_str(), empty_line.size());
-                filled += empty_line.size();
-
-                // write file data onto chunks and keep sending chunks till the whole file is sent
-                int file_bytes_copied = 0;
-                while (file_bytes_copied < file_size && !in.eof())
-                {
-                    if (filled == 0)
-                    {
-                        memset(chunk, 0, CHUNK_SIZE);
-                    }
-                    int file_bytes_to_copy = min(CHUNK_SIZE - filled, file_size - file_bytes_copied);
-                    in.read(chunk, file_bytes_to_copy);
-                    file_bytes_copied += file_bytes_to_copy;
-                    write(fd, chunk, file_bytes_to_copy + filled);
-                    filled = 0;
-                }
-                // free resources
-                in.close();
-                free(chunk);
+                handle_get_request(file_path,fd);
             }
             else if (command == "POST")
             {
