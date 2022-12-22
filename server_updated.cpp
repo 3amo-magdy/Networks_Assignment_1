@@ -68,11 +68,14 @@ while(true):
 static const std::string error_code = "HTTP/1.1 500 Internal Server Error\r\n";
 static const std::string success_code = "HTTP/1.1 200 OK\r\n";
 static const std::string clength_header = "Content-Length: ";
-static const std::string welcome_msg("<html><body>welcome to our server!<br>  - Use GET <file_name> <http_version>  to retrieve a file<br>  - Use POST <file_name> <http_version>  to upload a file</body></html>");
+static const std::string welcome_msg("<html><body><h1>welcome to our server!</h1><br>  - Use GET <file_name> <http_version>  to retrieve a file<br>  - Use POST <file_name> <http_version>  to upload a file</body></html>\r\n");
 static const std::string empty_line = "\r\n";
-static const std::string open_fail_err = "failed to open the file";
-static const std::string un_supported_err = "un supported command";
-static const std::string file_received = "the file's chunk has been uploaded to the server successfully";
+static const std::string open_fail_err = "failed to open the file\r\n";
+static const std::string un_supported_err = "un supported command\r\n";
+static const std::string parse_err = "parsing error | invalid http request\r\n";
+
+static const std::string file_received = "the file's chunk has been uploaded to the server successfully\r\n";
+
 
 /**
  * computes the duration before time_out based on the number of concurrent connections
@@ -98,6 +101,17 @@ void send_open_fail_err(int fd)
     response.push_back(error_code);
     response.push_back(empty_line);
     response.push_back(open_fail_err);
+    send_onto_socket(response, fd);
+    // perror("failed to open the file | executing GET");
+}
+
+void send_parse_err(int fd)
+{
+    // send open_fail error
+    std::vector<std::string> response;
+    response.push_back(error_code);
+    response.push_back(empty_line);
+    response.push_back(parse_err);
     send_onto_socket(response, fd);
     // perror("failed to open the file | executing GET");
 }
@@ -236,53 +250,47 @@ int worker(int *active_connections, int fd, std::mutex *lock)
             // parse the chunk into -> request, file_path, content_length(in case of post)
             std::string request = "";
             myHTTP parser;
-            parser.parseHTTP(buffer, buffer_size);
-            command = parser.command;
-            file_path = parser.argument;
+            if(!parser.parseHTTP(buffer, buffer_size)){
+                // send open_fail error
+                send_parse_err(fd);
+                continue;
+            }
+            command = parser.command_or_httpversion;
+            file_path = parser.argument_or_code;
             if (file_path == "/")
             {
+                std::cout<<"welcome !"<<"\n";
                 // allocate the in-memory chunk to be sent in socket
-                char *chunk = (char *)(malloc(CHUNK_SIZE));
+                std::vector<std::string> msgs{};
                 // write success_code
-                strncpy(chunk, (success_code.c_str()), success_code.size());
-                std::cout << chunk << '\n';
-
-                int filled = success_code.size();
+                msgs.push_back(success_code);
                 // write content-length header_name:
-                strncpy(chunk + filled, clength_header.c_str(), clength_header.size());
-                std::cout << chunk << '\n';
-                filled += (int)clength_header.size();
+                msgs.push_back(clength_header);
                 // write content-length header_value:
                 int body_size = welcome_msg.size();
                 std::string body_size_str = std::to_string(body_size);
-                strncpy(chunk + filled, body_size_str.c_str(), body_size_str.size());
-                filled += body_size_str.size();
-
+                msgs.push_back(body_size_str);
                 // write an empty line at end of header
-                strncpy(chunk + filled, empty_line.c_str(), empty_line.size());
-                filled += empty_line.size();
+                msgs.push_back(empty_line);
                 // write an empty line at end of header section
-                strncpy(chunk + filled, empty_line.c_str(), empty_line.size());
-                filled += empty_line.size();
-
-                // write welcome text
-                strncpy(chunk + filled, (welcome_msg.c_str()), welcome_msg.size());
-                filled += welcome_msg.size();
-                std::cout << chunk << '\n';
-                send(fd, chunk, filled, 0);
-                filled = 0;
+                msgs.push_back(empty_line);
+                //send welcoming msg
+                msgs.push_back(welcome_msg);
+                send_onto_socket(msgs,fd);
                 continue;
+            }
+            if(file_path[0]=='/'){
+                file_path = file_path.substr(1,file_path.size());
             }
             if (command == "GET")
             {
-                handle_get_request(file_path.substr(1,file_path.size()),fd);
+                handle_get_request(file_path,fd);
             }
             else if (command == "POST")
             {
                 size_to_read = parser.content_length;
                 // file opening:
                 std::ofstream out(file_path, std::ios::binary);
-                char *chunk = (char *)malloc(CHUNK_SIZE);
                 if (out.fail())
                 {
                     send_open_fail_err(fd);
@@ -309,9 +317,6 @@ int worker(int *active_connections, int fd, std::mutex *lock)
                 response.push_back(empty_line);
                 response.push_back(file_received);
                 send_onto_socket(response, fd);
-                
-                // free resources
-                free(chunk);
                 
                 //update the yet_to_read amount of bytes
                 size_to_read -= parser.body_size;
