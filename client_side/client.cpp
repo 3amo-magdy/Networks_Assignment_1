@@ -16,7 +16,6 @@ using namespace std;
 #define PORT 3490       // the port client will be connecting to
 #define MAXDATASIZE 100 // max number of bytes we can get at once
 #define INPUT_FILE_PATH "input_file.txt"
-#define DURATION_BEFORE_TIME_OUT 5
 // int source_port_number = 0;
 string server_ip="";
 short server_port_number = 0;
