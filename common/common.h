@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <vector>
 #include <fstream>
+#define DURATION_BEFORE_TIME_OUT 5
 
 
 #define CHUNK_SIZE 1024

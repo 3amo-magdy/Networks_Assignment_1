@@ -109,14 +109,33 @@ void process_get(query q){
     myFile.write(body_start,parser.body_size);
     int bytes_missing = length - parser.body_size;
     cout<<"\nBYTES MISSING "<<bytes_missing<<"\n";
+    // build the timeval struct to call select
+    timeval time_out{};
+    time_out.tv_sec = DURATION_BEFORE_TIME_OUT;
+    time_out.tv_usec = 0;
+    // set up the parameters for select
+    fd_set sever_input;
+    FD_ZERO(&sever_input);
+    FD_SET(socketfd, &sever_input);
+    int select_returned = -1;
+    // wait till time_out or something is there to read
     while (bytes_missing>0)
     {
+        select_returned = select(socketfd + 1, &sever_input, nullptr, nullptr, &time_out);
+        if(select_returned == 0){
+            perror("sever timed out");
+            break;
+        }
+        if(select_returned == -1){
+            perror("select err");
+            break;
+        }
         char temp_buff[CHUNK_SIZE];
         memset(temp_buff,'\0',CHUNK_SIZE);
         int bytes = recv(socketfd,temp_buff,CHUNK_SIZE,0);
         bytes_missing-=bytes;
 
-        cout<<"\nByt received "<<temp_buff<<"\n";
+        cout<<"\nBytw received "<<temp_buff<<"\n";
         cout<< "bytes read: "<<bytes<<"\n\n";
         if(bytes==0) break;
 
@@ -163,24 +182,68 @@ void process_post(query q){
     request_headers.emplace_back("\r\n");
 
 
-    char* data_pointer_in_chunk = strscpy(chunk,request_headers);
+    char* data_pointer_in_chunk_end = strscpy(chunk,request_headers);
+    char* data_pointer_in_chunk_start = chunk;
+
     bool chunk_should_be_empty = false;
 
-    int file_bytes_copied = 0;
-    while (file_bytes_copied < file_size && !in.eof())
+    //write file data onto chunks and keep sending chunks till the whole file is sent
+
+    //sudo:
+    //-----
+    //while(file not fully sent)
+        //reset the buffer for good measures
+        //read chunk from file into buffer
+        //keep writing till finished sending the chunk while()
+    
+
+
+    int file_bytes_sent = 0;
+    
+    int used_space = data_pointer_in_chunk_end - data_pointer_in_chunk_start;
+
+    int actual_chunk_size = min(CHUNK_SIZE - used_space, file_size - file_bytes_sent);
+    // memset(chunk, 0, CHUNK_SIZE);
+    in.read(chunk + used_space,actual_chunk_size);
+    int chunk_bytes_sent = 0;
+    while (chunk_bytes_sent<actual_chunk_size+used_space)
     {
-        if (chunk_should_be_empty)
-        {
-            memset(chunk, 0, CHUNK_SIZE);
-        }
-        int file_bytes_to_copy = min((CHUNK_SIZE - (data_pointer_in_chunk - chunk)), (long)(file_size - file_bytes_copied));
-        in.read(data_pointer_in_chunk,file_bytes_to_copy);
-        data_pointer_in_chunk += file_bytes_to_copy;
-        int actual = write(socketfd, chunk, data_pointer_in_chunk - chunk);
-        file_bytes_copied += actual;
-        data_pointer_in_chunk -= actual;
-        chunk_should_be_empty = (data_pointer_in_chunk == chunk);
+        int actual_chunk_bytes_sent = write(socketfd,chunk+chunk_bytes_sent,actual_chunk_size+used_space-chunk_bytes_sent);
+        chunk_bytes_sent += actual_chunk_bytes_sent;
     }
+    file_bytes_sent+=actual_chunk_size;
+
+
+    while (file_bytes_sent < file_size)
+    {
+        int actual_chunk_size = min(CHUNK_SIZE, file_size - file_bytes_sent);
+        memset(chunk, 0, CHUNK_SIZE);
+        in.read(chunk,actual_chunk_size);
+        int chunk_bytes_sent = 0;
+        while (chunk_bytes_sent<actual_chunk_size)
+        {
+            int actual_chunk_bytes_sent = write(socketfd,chunk+chunk_bytes_sent,actual_chunk_size-chunk_bytes_sent);
+            chunk_bytes_sent += actual_chunk_bytes_sent;
+        }
+        file_bytes_sent+=actual_chunk_size;
+    }
+    // bool chunk_should_be_empty = false;
+
+    // int file_bytes_copied = 0;
+    // while (file_bytes_copied < file_size && !in.eof())
+    // {
+    //     if (chunk_should_be_empty)
+    //     {
+    //         memset(chunk, 0, CHUNK_SIZE);
+    //     }
+    //     int file_bytes_to_copy = min((CHUNK_SIZE - (data_pointer_in_chunk - chunk)), (long)(file_size - file_bytes_copied));
+    //     in.read(data_pointer_in_chunk,file_bytes_to_copy);
+    //     data_pointer_in_chunk += file_bytes_to_copy;
+    //     int actual = write(socketfd, chunk, data_pointer_in_chunk - chunk);
+    //     file_bytes_copied += actual;
+    //     data_pointer_in_chunk -= actual;
+    //     chunk_should_be_empty = (data_pointer_in_chunk == chunk);
+    // }
     // free resources
     in.close();
     free(chunk);

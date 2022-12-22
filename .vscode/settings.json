@@ -16,6 +16,8 @@
         "scoped_allocator": "cpp",
         "stdexcept": "cpp",
         "type_traits": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "string": "cpp",
+        "fstream": "cpp"
     }
 }

@@ -74,6 +74,8 @@ static const std::string empty_line = "\r\n";
 static const std::string open_fail_err = "failed to open the file\r\n";
 static const std::string un_supported_err = "un supported command\r\n";
 static const std::string parse_err = "parsing error | invalid http request\r\n";
+static const std::string read_err = "reading error in worker thread\r\n";
+static const std::string fwrite_err = "file writing error in worker thread\r\n";
 
 static const std::string file_received = "the file's chunk has been uploaded to the server successfully\r\n";
 
@@ -108,7 +110,22 @@ void send_open_fail_err(int fd)
     response.push_back(empty_line);
     response.push_back(open_fail_err);
     send_onto_socket(response, fd);
-    // perror("failed to open the file | executing GET");
+}
+void send_reading_error(int fd)
+{
+    std::vector<std::string> response;
+    response.push_back(error_code);
+    response.push_back(empty_line);
+    response.push_back(read_err);
+    send_onto_socket(response, fd);
+}
+void send_writing_error(int fd)
+{
+    std::vector<std::string> response;
+    response.push_back(error_code);
+    response.push_back(empty_line);
+    response.push_back(fwrite_err);
+    send_onto_socket(response, fd);
 }
 
 void send_parse_err(int fd)
@@ -153,26 +170,69 @@ void handle_get_request(std::string file_path, int fd){
     // write an empty line at end of header section
     response_headers.push_back(empty_line);
     
-    char* data_pointer_in_chunk = strscpy(chunk,response_headers);
+    char* data_pointer_in_chunk_end = strscpy(chunk,response_headers);
+    char* data_pointer_in_chunk_start = chunk;
 
     bool chunk_should_be_empty = false;
 
-    // write file data onto chunks and keep sending chunks till the whole file is sent
-    int file_bytes_copied = 0;
-    while (file_bytes_copied < file_size && !in.eof())
+    //write file data onto chunks and keep sending chunks till the whole file is sent
+
+    //sudo:
+    //-----
+    //while(file not fully sent)
+        //reset the buffer for good measures
+        //read chunk from file into buffer
+        //keep writing till finished sending the chunk while()
+    
+
+
+    int file_bytes_sent = 0;
+
+    int used_space = data_pointer_in_chunk_end - data_pointer_in_chunk_start;
+
+    int actual_chunk_size = min(CHUNK_SIZE - used_space, file_size - file_bytes_sent);
+    // memset(chunk, 0, CHUNK_SIZE);
+    in.read(chunk + used_space,actual_chunk_size);
+    int chunk_bytes_sent = 0;
+    while (chunk_bytes_sent<actual_chunk_size+used_space)
     {
-        if (chunk_should_be_empty)
-        {
-            memset(chunk, 0, CHUNK_SIZE);
-        }
-        int file_bytes_to_copy = min(CHUNK_SIZE - (data_pointer_in_chunk - chunk), (file_size - file_bytes_copied));
-        in.read(data_pointer_in_chunk,file_bytes_to_copy);
-        data_pointer_in_chunk += file_bytes_to_copy;
-        int actual = write(fd, chunk, data_pointer_in_chunk - chunk);
-        file_bytes_copied += actual;
-        data_pointer_in_chunk -= actual;
-        chunk_should_be_empty = (data_pointer_in_chunk == chunk);
+        int actual_chunk_bytes_sent = write(fd,chunk+chunk_bytes_sent,actual_chunk_size+used_space-chunk_bytes_sent);
+        chunk_bytes_sent += actual_chunk_bytes_sent;
     }
+    file_bytes_sent+=actual_chunk_size;
+
+
+    while (file_bytes_sent < file_size)
+    {
+        int actual_chunk_size = min(CHUNK_SIZE, file_size - file_bytes_sent);
+        memset(chunk, 0, CHUNK_SIZE);
+        in.read(chunk,actual_chunk_size);
+        int chunk_bytes_sent = 0;
+        while (chunk_bytes_sent<actual_chunk_size)
+        {
+            int actual_chunk_bytes_sent = write(fd,chunk+chunk_bytes_sent,actual_chunk_size-chunk_bytes_sent);
+            chunk_bytes_sent += actual_chunk_bytes_sent;
+        }
+        file_bytes_sent+=actual_chunk_size;
+    }
+    
+
+    // while (file_bytes_sent < file_size)
+    // {
+    //     if (chunk_should_be_empty)
+    //     {
+    //         memset(chunk, 0, CHUNK_SIZE);
+    //     }
+    //     int file_bytes_to_copy = min(CHUNK_SIZE - (data_pointer_in_chunk_end - chunk), (file_size - file_bytes_sent));
+    //     in.read(data_pointer_in_chunk_end,file_bytes_to_copy);
+    //     data_pointer_in_chunk_end += file_bytes_to_copy;
+    //     int actual = write(fd, chunk, data_pointer_in_chunk_end - chunk);
+
+
+    //     file_bytes_sent += actual;
+    //     data_pointer_in_chunk_end -= actual;
+    //     chunk_should_be_empty = (data_pointer_in_chunk_end == chunk);
+    // }
     // free resources
     in.close();
     free(chunk);
@@ -180,13 +240,6 @@ void handle_get_request(std::string file_path, int fd){
 
 int worker(int *active_connections, int fd, std::mutex *lock)
 {
-    /**
-     * modes:
-     * 0: waiting for request
-     * 1: downloading a chunk of data onto a file
-     */
-    int mode = 0;
-    int size_to_read = 0;
     std::string command;
     std::string file_path;
 
@@ -212,8 +265,9 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         can_read = select(fd + 1, &input, nullptr, nullptr, &time_out);
         if (can_read == -1)
         {
-            perror("select err in worker");
-            exit(1);
+            // perror("select err in worker");
+            continue;
+            // exit(1);
         }
         // if time_out occurred:
         else if (can_read == 0)
@@ -229,7 +283,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         if (!FD_ISSET(fd, &input))
         {
             std::cout << ("illegal state!\n");
-            exit(1);
+            return 0 ;
         }
         // there's something to read:
         // read the chunk (unblocking after select()):
@@ -247,145 +301,108 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         }
         if (buffer_size == -1)
         {
-            perror("buffer reading err | worker");
-            exit(1);
+            // perror("buffer reading err | worker");
+            send_reading_error(fd);
+            continue;
         }
         // print all what was received:
         std::cout << buffer << '\n';
-        // if in mode [waiting for a request]
-        if (mode == 0)
-        {
-            // parse the chunk into -> request, file_path, content_length(in case of post)
-            std::string request = "";
-            myHTTP parser;
-            if(!parser.parseHTTP(buffer, buffer_size)){
-                // send open_fail error
-                send_parse_err(fd);
-                continue;
-            }
-            command = parser.command_or_httpversion;
-            file_path = parser.argument_or_code;
-            if (file_path == "/")
-            {
-                std::cout<<"welcome !"<<"\n";
-                // allocate the in-memory chunk to be sent in socket
-                std::vector<std::string> msgs{};
-                // write success_code
-                msgs.push_back(success_code);
-                // write content-length header_name:
-                msgs.push_back(clength_header);
-                // write content-length header_value:
-                int body_size = welcome_msg.size();
-                std::string body_size_str = std::to_string(body_size);
-                msgs.push_back(body_size_str);
-                // write an empty line at end of header
-                msgs.push_back(empty_line);
-                // write an empty line at end of header section
-                msgs.push_back(empty_line);
-                //send welcoming msg
-                msgs.push_back(welcome_msg);
-                send_onto_socket(msgs,fd);
-                continue;
-            }
-            if(file_path[0]=='/'){
-                file_path = file_path.substr(1,file_path.size());
-            }
-            if (command == "GET")
-            {
-                handle_get_request(file_path,fd);
-            }
-            else if (command == "POST")
-            {
-                size_to_read = parser.content_length;
-                // file opening:
-                
-                std::ofstream out(file_path, std::ios::binary);
-                if (out.fail())
-                {
-                    send_open_fail_err(fd);
-                    out.close();
-                    continue;
-                }
 
-                // write the body of the http msg into the file
-                out.write(parser.body_start, parser.body_size);
-
-                if (out.bad())
-                {
-                    // send open_fail error
-                    send_open_fail_err(fd);
-                    out.close();
-                    continue;
-                }
-                out.close();
-
-
-                //build & send response
-                std::vector<std::string> response;
-                response.push_back(success_code);
-                response.push_back(empty_line);
-                response.push_back(file_received);
-                send_onto_socket(response, fd);
-                
-                //update the yet_to_read amount of bytes
-                size_to_read -= parser.body_size;
-
-                // change the mode to (downloading) if the file wasn't fully recieved:
-                if (size_to_read > 0)
-                {
-                    mode = 1;
-                }
-            }
-            else
-            {
-                // perror("unsupported command");
-                std::vector<std::string> response;
-                response.push_back(error_code);
-                response.push_back(empty_line);
-                response.push_back(un_supported_err);
-                send_onto_socket(response, fd);
-            }
+        // parse the chunk into -> request, file_path, content_length(in case of post)
+        std::string request = "";
+        myHTTP parser;
+        if(!parser.parseHTTP(buffer, buffer_size)){
+            // send open_fail error
+            send_parse_err(fd);
+            continue;
         }
-        else if (mode == 1)
+        command = parser.command_or_httpversion;
+        file_path = parser.argument_or_code;
+        if (file_path == "/")
         {
-            bzero(buffer, CHUNK_SIZE);
-            int chunk_bytes_read = read(fd, buffer, sizeof(buffer));
-            if (chunk_bytes_read == 0)
+            std::cout<<"welcome !"<<"\n";
+            // allocate the in-memory chunk to be sent in socket
+            std::vector<std::string> msgs{};
+            // write success_code
+            msgs.push_back(success_code);
+            // write content-length header_name:
+            msgs.push_back(clength_header);
+            // write content-length header_value:
+            int body_size = welcome_msg.size();
+            std::string body_size_str = std::to_string(body_size);
+            msgs.push_back(body_size_str);
+            // write an empty line at end of header
+            msgs.push_back(empty_line);
+            // write an empty line at end of header section
+            msgs.push_back(empty_line);
+            //send welcoming msg
+            msgs.push_back(welcome_msg);
+            send_onto_socket(msgs,fd);
+            continue;
+        }
+        if(file_path[0]=='/'){
+            file_path = file_path.substr(1,file_path.size());
+        }
+        if (command == "GET")
+        {
+            handle_get_request(file_path,fd);
+        }
+        else if (command == "POST")
+        {
+            std::fstream myFile;
+            myFile.open (file_path, std::ofstream::binary | std::ofstream::out | std::ofstream::trunc);
+            myFile.write(parser.body_start,parser.body_size);
+            int bytes_missing = parser.content_length - parser.body_size;
+            // cout<<"\nBYTES MISSING "<<bytes_missing<<"\n";
+            // build the timeval struct to call select
+            timeval time_out{};
+            time_out.tv_sec = DURATION_BEFORE_TIME_OUT;
+            time_out.tv_usec = 0;
+            // set up the parameters for select
+            fd_set client_input;
+            FD_ZERO(&client_input);
+            FD_SET(fd, &client_input);
+            int select_returned = -1;
+            bool failed = false;
+            // wait till time_out or something is there to read
+            while (bytes_missing>0)
             {
-                // close connection
-                lock->lock();
-                *active_connections = *active_connections - 1;
-                lock->unlock();
-                close(fd);
-                return 0;
+                select_returned = select(fd + 1, &client_input, nullptr, nullptr, &time_out);
+                if(select_returned == 0){
+                    failed = true;
+                    break;
+                }
+                if(select_returned == -1){
+                    failed = true;
+                    break;
+                }
+                char temp_buff[CHUNK_SIZE];
+                memset(temp_buff,'\0',CHUNK_SIZE);
+                int bytes = recv(fd,temp_buff,CHUNK_SIZE,0);
+                bytes_missing-=bytes;
+                if(bytes==0) break;
+                myFile.write(temp_buff,bytes);
             }
-            if (chunk_bytes_read == -1)
-            {
-                perror("buffer reading err | worker mode = 1");
-                exit(1);
-            }
-            size_to_read -= chunk_bytes_read;
-            if (size_to_read < 0)
-            {
-                perror("wrong content-length received from client !");
-            }
-            if (size_to_read == 0)
-            {
-                mode = 0;
-            }
-            // write append onto file
-            std::ofstream out(file_path, std::ofstream::ate | std::ofstream::binary);
-            if (out.fail())
-            {
-                perror("failed to open the file | executing POST mode 1 !!!");
-            }
-            out.write(buffer, chunk_bytes_read);
-            if (out.bad())
-            {
-                out.close();
-                perror("failed to write to the file | executing POST mode 1 !!!");
-            }
-            out.close();
+            myFile.close();
+            if(failed){
+                send_reading_error(fd);
+                continue;
+            }            
+            //build & send response
+            std::vector<std::string> response;
+            response.push_back(success_code);
+            response.push_back(empty_line);
+            response.push_back(file_received);
+            send_onto_socket(response, fd);
+        }
+        else
+        {
+            //"unsupported command"
+            std::vector<std::string> response;
+            response.push_back(error_code);
+            response.push_back(empty_line);
+            response.push_back(un_supported_err);
+            send_onto_socket(response, fd);
         }
     }
 }
@@ -433,7 +450,7 @@ int main(int argc, char** argv){
     // make the socket start the socket listening to client connections
     if (listen(listener, MAX_CLIENTS) == -1)
     {
-        perror("listen");
+        perror("listen err");
         exit(1);
     }
     // the server loop (forever running)
