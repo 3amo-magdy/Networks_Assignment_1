@@ -30,11 +30,7 @@ using namespace std;
 #define INPUT_FILE_PATH "input_file.txt"
 // int source_port_number = 0;
 string server_ip="";
-<<<<<<< Updated upstream
 short server_port_number = 0;
-=======
-int server_port_number=-1;
->>>>>>> Stashed changes
 int socketfd=0;
 
 typedef struct query{
@@ -67,11 +63,7 @@ void validate_read_line(int numArgs, vector<string> args){
 
     if(numArgs == 4) port_num_str=args[3];
     if(command != "client_get" && command != "client_post"){
-<<<<<<< Updated upstream
-        cout<<"Invalid command, make sure it is client_get or client_post, lowercase letters."<<endl;
-=======
         cout<<"Invalid command, make sure it is client_get or client_post, lowercase letters." << command <<'|'<<endl;
->>>>>>> Stashed changes
         exit(1);
     } 
 
@@ -102,12 +94,6 @@ void process_query(query q){
     string request = "";
     if(q.get) request = "GET /"+q.file_path+" HTTP/1.1\r\n\r\n";
     else request = "POST /"+q.file_path+" HTTP/1.1\r\n\r\n";
-<<<<<<< Updated upstream
-    cout<< "-----------"<<'\n';
-    cout<< request;
-    cout<< "-----------"<<'\n';
-=======
->>>>>>> Stashed changes
 
     //send http request
     if(send(socketfd,request.c_str(),request.size(),0) == -1){
@@ -123,21 +109,8 @@ void process_query(query q){
         cout << buff <<'\n';
 
         //u could give myHTTP object a shot (just use the headerlines of it)
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
-        cout << "yooooooooo look here -> ctrl+f (yooo)"<<'\n';
+        cout << "tony look here !, ctrl+f (look)"<<'\n';
+
 
         char c1 = buff[0];
         char c2 = buff[1];
@@ -240,29 +213,18 @@ int main(int argc, char** argv)
         cout<<"wrong number of args"<<endl;
         exit(1);
     } else {
-<<<<<<< Updated upstream
-        string port_str = argv[2];
-        short temp_port_num = stoi(port_str);
-=======
         string port_str(argv[2]);
         int temp_port_num = std::stoi(port_str);
 
->>>>>>> Stashed changes
         if(temp_port_num <= 1000) { //error or kernel reserved ports 
             cout<<"Wrong/unaccepted port number. "<<endl;
             exit(1);
         }
         server_port_number=temp_port_num;
-<<<<<<< Updated upstream
-        // cout<<source_port_number <<" <> "<<temp_port_num<<endl;
-        if(argv[1]=="localhost") server_ip="127.0.0.1";
-        else server_ip=argv[1];
-=======
 
         // if(argv[1]=="localhost") server_ip="127.0.0.1";
         // else 
         server_ip=argv[1];
->>>>>>> Stashed changes
         // server_ip = argv[1];
     }
 
@@ -280,22 +242,13 @@ int main(int argc, char** argv)
     struct sockaddr_in serv_addr{};
     serv_addr.sin_family=AF_INET;
     if(server_ip=="localhost"){
-        cout<<"localhost"<<'\n'<<server_port_number<<'\n';
-        // serv_addr.sin_addr.s_addr = INADDR_ANY;
-        server_ip = "127.0.0.1";
-        inet_aton(server_ip.c_str(), &(serv_addr.sin_addr));
-
+        serv_addr.sin_addr.s_addr = INADDR_ANY;
     }
     else{
        inet_aton(server_ip.c_str(), &(serv_addr.sin_addr));
     }
     serv_addr.sin_port = htons(server_port_number);
-<<<<<<< Updated upstream
-    // inet_aton(INADDR_ANY, &(serv_addr.sin_addr));
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
 
-=======
->>>>>>> Stashed changes
     memset(&(serv_addr.sin_zero),'\0',8);
 
     cout<<server_ip<<"\n"<<server_port_number<<endl;
