@@ -1,1 +1,1 @@
-client_get hello.txt tony
+client_get test.cpp localhost 6116
