@@ -18,6 +18,7 @@
         "type_traits": "cpp",
         "valarray": "cpp",
         "string": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "thread": "cpp"
     }
 }

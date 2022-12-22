@@ -11,6 +11,8 @@
 #include <sstream>
 #include <vector>
 #include "../common/myHTTP.cpp"
+#include <sys/wait.h>
+
 using namespace std;
 #define INPUT_FILE_PATH "input_file.txt"
 string server_ip="";
@@ -172,11 +174,9 @@ void process_post(query q){
     request_headers.emplace_back("\r\n");
     request_headers.emplace_back("\r\n");
 
-
-    char* data_pointer_in_chunk_end = strscpy(chunk,request_headers);
     char* data_pointer_in_chunk_start = chunk;
+    char* data_pointer_in_chunk_end = strscpy(chunk,request_headers);
 
-    bool chunk_should_be_empty = false;
 
     //write file data onto chunks and keep sending chunks till the whole file is sent
 
@@ -194,7 +194,6 @@ void process_post(query q){
     //used_chunk_space
     int used_space = data_pointer_in_chunk_end - data_pointer_in_chunk_start;
     int actual_chunk_size = min(CHUNK_SIZE - used_space, file_size - file_bytes_sent);
-    // memset(chunk, 0, CHUNK_SIZE);
     in.read(chunk + used_space,actual_chunk_size);
     int chunk_bytes_sent = 0;
     while (chunk_bytes_sent<actual_chunk_size+used_space)
@@ -205,12 +204,12 @@ void process_post(query q){
     file_bytes_sent+=actual_chunk_size;
 
 
-    while (file_bytes_sent < file_size)
+    while (file_bytes_sent < file_size && !in.eof())
     {
         int actual_chunk_size = min(CHUNK_SIZE, file_size - file_bytes_sent);
-        memset(chunk, 0, CHUNK_SIZE);
+        memset(chunk, '\0', CHUNK_SIZE);
         in.read(chunk,actual_chunk_size);
-        int chunk_bytes_sent = 0;
+        chunk_bytes_sent = 0;
         while (chunk_bytes_sent<actual_chunk_size)
         {
             int actual_chunk_bytes_sent = write(socketfd,chunk+chunk_bytes_sent,actual_chunk_size-chunk_bytes_sent);
@@ -221,6 +220,12 @@ void process_post(query q){
 
     // free resources
     in.close();
+    memset(chunk, '\0', CHUNK_SIZE);
+    int response_size = read(socketfd,chunk,CHUNK_SIZE);
+    string rsp =  string(chunk).substr(0,response_size);
+    cout << rsp <<"\n";
+
+
     free(chunk);
 }
 
