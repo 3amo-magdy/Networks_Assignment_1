@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <vector>
 #include <sys/stat.h>
+#include <fstream>
+
 
 #define CHUNK_SIZE 1024
 
@@ -43,6 +45,34 @@ static void send_onto_socket(std::vector<std::string> messages, int fd)
     }
     write(fd, chunk, used_bytes);
     free(chunk);
+}
+/**
+ * puts strings into destination in order. no terminator characters are copied.
+*/
+static char* strscpy(char* dest,std::vector<std::string> messages)
+{   
+    char* pointer = dest;
+    for (std::string msg : messages)
+    {
+        strncpy(pointer , msg.c_str(), msg.size());
+        pointer = pointer + msg.size();
+    }
+    return pointer;
+}
+
+/**
+ * puts amount of [size] bytes of file content into destination. 
+*/
+static char* fcpy(char* dest,std::ifstream ifile,int size)
+{
+    ifile.read(dest,size);
+    return dest+size;
+}
+
+static int fsize(std::ifstream ifile){
+    ifile.seekg(std::ios::end);
+    int file_size = ifile.tellg();
+    ifile.seekg(std::ios::beg);
 }
 
 
