@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <vector>
+#include <sys/stat.h>
 
 #define CHUNK_SIZE 1024
 
@@ -42,6 +43,22 @@ static void send_onto_socket(std::vector<std::string> messages, int fd)
     }
     write(fd, chunk, used_bytes);
     free(chunk);
+}
+
+
+long long GetFileSize(std::string filename)
+{
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
+
+
+long long FdGetFileSize(int fd)
+{
+    struct stat stat_buf;
+    int rc = fstat(fd, &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
 }
 
 

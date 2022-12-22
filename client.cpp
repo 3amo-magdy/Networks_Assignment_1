@@ -29,13 +29,17 @@ using namespace std;
 #define MAXDATASIZE 100 // max number of bytes we can get at once
 #define INPUT_FILE_PATH "input_file.txt"
 int source_port_number = 0;
-
+string server_ip="";
+int server_port_number = 0;
+int socketfd=0;
 
 typedef struct query{
     bool get;  // false => post
-    string file_name;
-    string dest_ip_number;
-    int dest_port_number;
+    string file_path;
+    string host_name;
+    int port_num_used;
+    // string dest_ip_number;
+    // int dest_port_number;
 };
 vector<query> queries;
 
@@ -84,6 +88,141 @@ void validate_read_line(int numArgs, vector<string> args){
 
 
 void process_query(query q){
+
+
+    //formulate message
+    string request = "";
+    if(q.get) request = "GET "+q.file_path+" HTTP/1.1\r\n\r\n";
+    else request = "POST "+q.file_path+" HTTP/1.1\r\n\r\n";
+
+    //send http request
+    if(send(socketfd,request.c_str(),request.length(),0) == -1){
+        cout<<"error sending request"<<endl;
+        exit(1);
+    }
+    
+    if(q.get){
+        //first chunk 
+        char buff[CHUNK_SIZE];
+        memset(buff,0,CHUNK_SIZE);
+        int read_bytes = recv(socketfd,buff,CHUNK_SIZE,0);
+
+        char c1 = buff[0];
+        char c2 = buff[1];
+        int ind = 2;
+        int read_lines_to_read_header=2;
+        string code_message="" +c1+c2;
+        while (c1 != '\r' && c2!='\n' && ind<read_bytes)
+        {
+            c1=c2;
+            c2=buff[ind];
+            ind++;
+            code_message = code_message+c2;
+        }
+        cout<<code_message<<endl;
+        if(code_message!="HTTP/1.1 200 OK\r\n"){
+            // we didn't receive the ok message
+            cout<<code_message<<endl;
+            exit(1);
+        }
+
+        string header_data ="";
+        while (ind <read_bytes){
+            header_data= header_data+buff[ind++];
+        }
+
+        int end_header_pos = header_data.find("\r\n\r\n");
+        string headers = header_data.substr(0,end_header_pos);
+        string body = header_data.substr(end_header_pos+5);
+
+        char* headers_copy = strcpy(headers_copy,headers.c_str());
+        vector<string> header_vec ;
+        char* token;
+        token = strtok(headers_copy, "\r\n"); 
+        while (token != NULL)  
+        {  
+            char* header;
+            strcpy(header,token);
+            header_vec.push_back(header);
+            token = strtok (NULL, "\r\n");  
+        }  
+
+        string size="";
+        int size_int = -1;
+        for(int i=0;i<header_vec.size();i++){
+            vector<string> divided = get_words(header_vec[i]);
+            if(divided[0]=="Content-Length:"){
+                size = divided[1];
+                size_int = stoi(size);
+            }
+        }
+
+
+        memset(buff,0,CHUNK_SIZE);
+
+        fstream myFile;
+        string file_new_name = q.file_path;
+        myFile.open (file_new_name, ios::binary);
+        myFile.write(body.c_str(),body.length());
+        int bytes_missing = size_int - body.length();
+        while (bytes_missing>0)
+        {
+            char temp_buff[CHUNK_SIZE];
+            int bytes = recv(socketfd,temp_buff,CHUNK_SIZE,0);
+            bytes_missing-=bytes;
+            myFile.write(temp_buff,bytes);
+        }
+        
+        myFile.close();
+        //write body to file
+        // bytes still missing = size - body bytes
+        // while loop
+        //          keep recv until no other bytes to be read
+        //          output to file
+        // close all files
+    }else{
+        //open file 
+        //get file size 
+        // content_sent = file size
+        //send ->"Content-Length: # \r\n\r\n"        
+        // while(content length>0)
+        //      read CHUNKMAX bytes from file (or less if content length<CHUNKMAX)
+        //      send MAXCHUNK bytes you can send    ??? But, should I write whole buffer and depend that he will stop ? or write only bytes I wanna send
+        //      content length -= MAXCHNK 
+        //
+
+
+
+    }   
+}
+
+
+
+
+int main(int argc, char** argv)
+{ 
+    int numArgs = argc-1;
+    if(numArgs != 2 ){
+        cout<<"wrong number of args"<<endl;
+        exit(1);
+    } else {
+        string port_str = argv[2];
+        int temp_port_num = stoi(port_str);
+        if(temp_port_num <= 1000) { //error or kernel reserved ports 
+            cout<<"Wrong/unaccepted port number. "<<endl;
+            exit(1);
+        }
+        source_port_number=temp_port_num;
+
+        if(argv[1]=="localhost") server_ip="127.0.0.1";
+        else server_ip=argv[1];
+        // server_ip = argv[1];
+    }
+
+
+
+
+
     int sockfd;
     //create file descriptor for communication
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
@@ -93,8 +232,8 @@ void process_query(query q){
     //setup address struct
     struct sockaddr_in serv_addr =*(new sockaddr_in());
     serv_addr.sin_family=AF_INET;
-    serv_addr.sin_port = htons(q.dest_port_number);
-    inet_aton(q.dest_ip_number.c_str(), &(serv_addr.sin_addr));
+    serv_addr.sin_port = htons(server_port_number);
+    inet_aton(server_ip.c_str(), &(serv_اaddr.sin_addr));
     memset(&(serv_addr.sin_zero),'\0',8);
 
     //connect
@@ -102,109 +241,8 @@ void process_query(query q){
         cout<<"error connecting"<<endl;
         exit(1);
     }
+    socketfd = sockfd;
 
-    //formulate message
-    string request = "";
-    if(q.get) request = "GET "+q.file_name+" HTTP/1.1\r\n\r\n";
-    else request = "POST "+q.file_name+" HTTP/1.1\r\n\r\n";
-
-    //send http request
-    if(send(sockfd,request.c_str(),request.length(),0) == -1){
-        cout<<"error sending request"<<endl;
-        exit(1);
-    }
-    
-    
-
-    //first chunk 
-    char buff[CHUNK_SIZE];
-    memset(buff,0,CHUNK_SIZE);
-    int read_bytes = recv(sockfd,buff,CHUNK_SIZE,0);
-
-    char c1 = buff[0];
-    char c2 = buff[1];
-    int ind = 2;
-    int read_lines_to_read_header=2;
-    string code_message="" +c1+c2;
-    while (c1 != '\r' && c2!='\n' && ind<read_bytes)
-    {
-        c1=c2;
-        c2=buff[ind];
-        ind++;
-        code_message = code_message+c2;
-    }
-    cout<<code_message<<endl;
-    if(code_message!="HTTP/1.1 200 OK\r\n"){
-        // we didn't receive the ok message
-        cout<<code_message<<endl;
-        exit(1);
-    }
-
-    string header_data ="";
-    while (ind <read_bytes){
-        header_data= header_data+buff[ind++];
-    }
-
-    int end_header_pos = header_data.find("\r\n\r\n");
-    string headers = header_data.substr(0,end_header_pos);
-    string body = header_data.substr(end_header_pos+5);
-
-    char* headers_copy = strcpy(headers_copy,headers.c_str());
-    vector<string> header_vec ;
-    char* token;
-    token = strtok(headers_copy, "\r\n"); 
-    while (token != NULL)  
-    {  
-        char* header;
-        strcpy(header,token);
-        header_vec.push_back(header);
-        token = strtok (NULL, "\r\n");  
-    }  
-
-    string size="";
-    int size_int = -1;
-    for(int i=0;i<header_vec.size();i++){
-        vector<string> divided = get_words(header_vec[i]);
-        if(divided[0]=="content-length:"){
-            size = divided[1];
-            size_int = stoi(size);
-        }
-    }
-
-
-    memset(buff,0,CHUNK_SIZE);
-
-    //write body to file
-    // bytes still missing = size - body bytes
-    // while loop
-    //          keep recv until no other bytes to be read
-    //          output to file
-    // close all files
-
-
-    
-
-
-}
-
-
-
-
-int main(int argc, char** argv)
-{ 
-    int numArgs = argc-1;
-    if(numArgs != 1 ){
-        cout<<"wrong number of args"<<endl;
-        exit(1);
-    } else {
-        string port_str = argv[1];
-        int temp_port_num = stoi(port_str);
-        if(temp_port_num <= 1000) { //error or kernel reserved ports 
-            cout<<"Wrong/unaccepted port number. "<<endl;
-            exit(1);
-        }
-        source_port_number=temp_port_num;
-    }
 
 
     fstream input_file;
@@ -212,26 +250,28 @@ int main(int argc, char** argv)
     vector<query> v;
     if(input_file.is_open()){
         string line;
+        int i=0;
         while (getline(input_file,line,'\n'))
         {
             vector<string> words = get_words(line);
             query q;
             validate_read_line(words.size(),words);            // validate line input
             if(words[0]=="client_get") q.get=true;
-            else q.get=false;
-        
-            if(words[1]=="localhost") q.dest_ip_number="127.0.0.1";
-            else q.dest_ip_number=words[1];
-
-            q.file_name=words[2];
-
+            else if(words[0]=="client_post") q.get=false;
+            else {
+                cout << "unknown command at line "+i <<endl;
+                exit(1);
+            }
+            i++;
+            q.file_path=words[1];
+            q.host_name=words[2];
             if(words.size()==4){
                 int temp_port_num = stoi(words[3]);
                 if(temp_port_num <= 1000) { //error or kernel reserved ports 
                     cout<<"Wrong/unaccepted port number. "<<endl;
                     exit(1);
                 }
-                q.dest_port_number=temp_port_num;
+                q.port_num_used=temp_port_num;
             }
             queries.push_back(q);
         }
@@ -246,55 +286,12 @@ int main(int argc, char** argv)
         process_query(queries[i]);
     }
 
-    // validate_read_line(numArgs,argv);
-
-
-
-
-
-
 
 
     
-    // int socket_descriptor;
-    
 
-    // int sockfd, numbytes;
-    // char buf[MAXDATASIZE];
-    // struct hostent *he;
-    // struct sockaddr_in their_addr; // connector’s address information
-    // if (argc != 2)
-    // {
-    //     fprintf(stderr, "usage: client hostname\n");
-    //     exit(1);
-    // }
-    // if ((he = gethostbyname(argv[1])) == NULL)
-    // { // get the host info
-    //     perror("gethostbyname");
-    //     exit(1);
-    // }
-    // if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    // {
-    //     perror("socket");
-    //     exit(1);
-    // }
-    // their_addr.sin_family = AF_INET;   // host byte order
-    // their_addr.sin_port = htons(PORT); // short, network byte order
-    // their_addr.sin_addr = *((struct in_addr *)he->h_addr);
-    // bzero(&(their_addr.sin_zero), 8); // zero the rest of the struct
-    // if (connect(sockfd, (struct sockaddr *)&their_addr,
-    //             sizeof(struct sockaddr)) == -1)
-    // {
-    //     perror("connect");
-    //     exit(1);
-    // }
-    // if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1)
-    // {
-    //     perror("recv");
-    //     exit(1);
-    // }
-    // buf[numbytes] = ’\0’;
-    // printf("Received: %s", buf);
-    // close(sockfd);
-    // return 0;
+
+
+
+
 }
