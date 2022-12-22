@@ -94,6 +94,9 @@ void process_query(query q){
     string request = "";
     if(q.get) request = "GET /"+q.file_path+" HTTP/1.1\r\n\r\n";
     else request = "POST /"+q.file_path+" HTTP/1.1\r\n\r\n";
+    cout<< "-----------"<<'\n';
+    cout<< request;
+    cout<< "-----------"<<'\n';
 
     //send http request
     if(send(socketfd,request.c_str(),request.length(),0) == -1){
