@@ -28,9 +28,9 @@ using namespace std;
 #define PORT 3490       // the port client will be connecting to
 #define MAXDATASIZE 100 // max number of bytes we can get at once
 #define INPUT_FILE_PATH "input_file.txt"
-int source_port_number = 0;
+// int source_port_number = 0;
 string server_ip="";
-int server_port_number = 0;
+short server_port_number = 0;
 int socketfd=0;
 
 typedef struct query{
@@ -62,7 +62,7 @@ void validate_read_line(int numArgs, vector<string> args){
     string port_num_str = "";
 
     if(numArgs == 4) port_num_str=args[3];
-    if(command != "client_get" || command != "client_post"){
+    if(command != "client_get" && command != "client_post"){
         cout<<"Invalid command, make sure it is client_get or client_post, lowercase letters."<<endl;
         exit(1);
     } 
@@ -92,8 +92,8 @@ void process_query(query q){
 
     //formulate message
     string request = "";
-    if(q.get) request = "GET "+q.file_path+" HTTP/1.1\r\n\r\n";
-    else request = "POST "+q.file_path+" HTTP/1.1\r\n\r\n";
+    if(q.get) request = "GET /"+q.file_path+" HTTP/1.1\r\n\r\n";
+    else request = "POST /"+q.file_path+" HTTP/1.1\r\n\r\n";
 
     //send http request
     if(send(socketfd,request.c_str(),request.length(),0) == -1){
@@ -161,7 +161,7 @@ void process_query(query q){
         memset(buff,0,CHUNK_SIZE);
 
         fstream myFile;
-        string file_new_name = q.file_path;
+        string file_new_name = "out.txt";
         myFile.open (file_new_name, ios::binary);
         myFile.write(body.c_str(),body.length());
         int bytes_missing = size_int - body.length();
@@ -202,18 +202,20 @@ void process_query(query q){
 int main(int argc, char** argv)
 { 
     int numArgs = argc-1;
+
+    cout << argc <<endl;
     if(numArgs != 2 ){
         cout<<"wrong number of args"<<endl;
         exit(1);
     } else {
         string port_str = argv[2];
-        int temp_port_num = stoi(port_str);
+        short temp_port_num = stoi(port_str);
         if(temp_port_num <= 1000) { //error or kernel reserved ports 
             cout<<"Wrong/unaccepted port number. "<<endl;
             exit(1);
         }
-        source_port_number=temp_port_num;
-
+        server_port_number=temp_port_num;
+        // cout<<source_port_number <<" <> "<<temp_port_num<<endl;
         if(argv[1]=="localhost") server_ip="127.0.0.1";
         else server_ip=argv[1];
         // server_ip = argv[1];
@@ -233,8 +235,12 @@ int main(int argc, char** argv)
     struct sockaddr_in serv_addr =*(new sockaddr_in());
     serv_addr.sin_family=AF_INET;
     serv_addr.sin_port = htons(server_port_number);
-    inet_aton(server_ip.c_str(), &(serv_اaddr.sin_addr));
+    // inet_aton(INADDR_ANY, &(serv_addr.sin_addr));
+    serv_addr.sin_addr.s_addr = INADDR_ANY;
+
     memset(&(serv_addr.sin_zero),'\0',8);
+
+    cout<<server_ip<<"\n"<<server_port_number<<endl;
 
     //connect
     if(connect(sockfd,(struct sockaddr*)&serv_addr,sizeof(serv_addr))==-1){
