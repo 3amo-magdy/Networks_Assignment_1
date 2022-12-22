@@ -61,7 +61,6 @@ while(true):
 #include <cstring>
 #include "myHTTP.cpp"
 #include <iostream>
-#define PORT 6116                // the port to bind & listen on
 #define MAX_CLIENTS 25           // max allowed number of active clients
 #define ONE_CLIENT_TIME_OUT 10.0 // the time_out duration if there's only one client connected in seconds
 #define CHUNK_SIZE 1024
@@ -76,6 +75,7 @@ static const std::string parse_err = "parsing error | invalid http request\r\n";
 
 static const std::string file_received = "the file's chunk has been uploaded to the server successfully\r\n";
 
+static int PORT = 6116;               // the port to bind & listen on
 
 /**
  * computes the duration before time_out based on the number of concurrent connections
@@ -365,7 +365,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
                 mode = 0;
             }
             // write append onto file
-            std::ofstream out(file_path, std::ios::binary);
+            std::ofstream out(file_path, std::ofstream::ate | std::ofstream::binary);
             if (out.fail())
             {
                 perror("failed to open the file | executing POST mode 1 !!!");
@@ -381,8 +381,12 @@ int worker(int *active_connections, int fd, std::mutex *lock)
     }
 }
 
-int main()
-{
+int main(int argc, char** argv){
+    if(argc<1){
+        std::cout << "type in atleast one argumet."<<"\n";
+    }
+    PORT = std::stoi(argv[1]);
+    std::cout<< PORT <<"\n";
     int active_connections = 0;
     std::mutex lock;
     int listener; // listening socket descriptor
