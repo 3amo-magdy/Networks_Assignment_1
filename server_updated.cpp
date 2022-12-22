@@ -104,7 +104,12 @@ void send_open_fail_err(int fd)
 
 
 void handle_get_request(std::string file_path, int fd){
-    std::ifstream in(file_path, std::ios::binary);
+    std::cout<<file_path<<'\n';
+    std::ifstream in(file_path, std::ifstream::ate | std::ifstream::binary);
+    // get file size
+    int file_size = in.tellg();
+    in.seekg(0, std::ios_base::beg);
+
     char *chunk = (char *)(malloc(CHUNK_SIZE));
     if (in.fail())
     {
@@ -120,10 +125,6 @@ void handle_get_request(std::string file_path, int fd){
     response_headers.push_back(clength_header);
 
     // write content-length value:
-    // get file size
-    in.seekg(std::ios::end);
-    int file_size = in.tellg();
-    in.seekg(std::ios::beg);
 
     std::string body_size_str = std::to_string(file_size);
     response_headers.push_back(body_size_str);
@@ -150,6 +151,7 @@ void handle_get_request(std::string file_path, int fd){
         int actual = write(fd, chunk, data_pointer_in_chunk - chunk);
         file_bytes_copied += actual;
         data_pointer_in_chunk -= actual;
+        chunk_should_be_empty = (data_pointer_in_chunk == chunk);
     }
     // free resources
     in.close();
@@ -273,7 +275,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
             }
             if (command == "GET")
             {
-                handle_get_request(file_path,fd);
+                handle_get_request(file_path.substr(1,file_path.size()),fd);
             }
             else if (command == "POST")
             {
