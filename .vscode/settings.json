@@ -1,0 +1,21 @@
+{
+    "files.associations": {
+        "*.tcc": "cpp",
+        "iostream": "cpp",
+        "atomic": "cpp",
+        "bitset": "cpp",
+        "exception": "cpp",
+        "random": "cpp",
+        "string_view": "cpp",
+        "cmath": "cpp",
+        "functional": "cpp",
+        "istream": "cpp",
+        "mutex": "cpp",
+        "new": "cpp",
+        "ostream": "cpp",
+        "scoped_allocator": "cpp",
+        "stdexcept": "cpp",
+        "type_traits": "cpp",
+        "valarray": "cpp"
+    }
+}
