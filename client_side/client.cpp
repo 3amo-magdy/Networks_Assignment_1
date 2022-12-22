@@ -101,7 +101,6 @@ void process_get(query q){
     int read_bytes = recv(socketfd,buff,CHUNK_SIZE,0);
     cout << buff <<'\n';
     myHTTP parser;
-    cout<<"READ bytes of " << read_bytes<<"\n";
     if(!parser.parseHTTP(buff,read_bytes))
     {
         cout<<"error parsing."<<"\n";
@@ -115,7 +114,6 @@ void process_get(query q){
         exit(1);
     }
     int length = parser.content_length;
-    cout<<length<<" heeere \n";
     char* body_start = parser.body_start;
 
     fstream myFile;
@@ -123,7 +121,6 @@ void process_get(query q){
     myFile.open (file_new_name, ofstream::binary | ofstream::out | ofstream::trunc);
     myFile.write(body_start,parser.body_size);
     int bytes_missing = length - parser.body_size;
-    cout<<"\nBYTES MISSING "<<bytes_missing<<"\n";
     // build the timeval struct to call select
     timeval time_out{};
     time_out.tv_sec = DURATION_BEFORE_TIME_OUT;
@@ -149,12 +146,7 @@ void process_get(query q){
         memset(temp_buff,'\0',CHUNK_SIZE);
         int bytes = recv(socketfd,temp_buff,CHUNK_SIZE,0);
         bytes_missing-=bytes;
-
-        cout<<"\nBytw received "<<temp_buff<<"\n";
-        cout<< "bytes read: "<<bytes<<"\n\n";
         if(bytes==0) break;
-
-
         myFile.write(temp_buff,bytes);
     }
     myFile.close();
@@ -164,7 +156,6 @@ void process_get(query q){
 
 void process_post(query q){
     string request= "POST /"+q.file_path+" HTTP/1.1\r\n";
-    cout<<q.file_path<<'\n';
     ifstream in(q.file_path, ifstream::ate | ifstream::binary);
     // get file size
     int file_size = in.tellg();
@@ -194,17 +185,17 @@ void process_post(query q){
 
     //sudo:
     //-----
+    //write up to the current chunksize
+    //send it
     //while(file not fully sent)
         //reset the buffer for good measures
         //read chunk from file into buffer
         //keep writing till finished sending the chunk while()
     
 
-
     int file_bytes_sent = 0;
-    
+    //used_chunk_space
     int used_space = data_pointer_in_chunk_end - data_pointer_in_chunk_start;
-
     int actual_chunk_size = min(CHUNK_SIZE - used_space, file_size - file_bytes_sent);
     // memset(chunk, 0, CHUNK_SIZE);
     in.read(chunk + used_space,actual_chunk_size);
@@ -230,23 +221,7 @@ void process_post(query q){
         }
         file_bytes_sent+=actual_chunk_size;
     }
-    // bool chunk_should_be_empty = false;
 
-    // int file_bytes_copied = 0;
-    // while (file_bytes_copied < file_size && !in.eof())
-    // {
-    //     if (chunk_should_be_empty)
-    //     {
-    //         memset(chunk, 0, CHUNK_SIZE);
-    //     }
-    //     int file_bytes_to_copy = min((CHUNK_SIZE - (data_pointer_in_chunk - chunk)), (long)(file_size - file_bytes_copied));
-    //     in.read(data_pointer_in_chunk,file_bytes_to_copy);
-    //     data_pointer_in_chunk += file_bytes_to_copy;
-    //     int actual = write(socketfd, chunk, data_pointer_in_chunk - chunk);
-    //     file_bytes_copied += actual;
-    //     data_pointer_in_chunk -= actual;
-    //     chunk_should_be_empty = (data_pointer_in_chunk == chunk);
-    // }
     // free resources
     in.close();
     free(chunk);
@@ -272,7 +247,6 @@ int main(int argc, char** argv)
 { 
     int numArgs = argc-1;
 
-    cout << argc <<endl;
     if(numArgs != 2 ){
         cout<<"wrong number of args"<<endl;
         exit(1);

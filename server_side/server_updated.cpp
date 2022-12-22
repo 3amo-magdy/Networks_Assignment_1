@@ -79,7 +79,7 @@ static const std::string fwrite_err = "file writing error in worker thread\r\n";
 
 static const std::string file_received = "the file's chunk has been uploaded to the server successfully\r\n";
 
-static int PORT = 6116;               // the port to bind & listen on
+static int PORT = 6116;               // the default port to bind & listen on
 
 
 
@@ -130,18 +130,15 @@ void send_writing_error(int fd)
 
 void send_parse_err(int fd)
 {
-    // send open_fail error
     std::vector<std::string> response;
     response.push_back(error_code);
     response.push_back(empty_line);
     response.push_back(parse_err);
     send_onto_socket(response, fd);
-    // perror("failed to open the file | executing GET");
 }
 
 
 void handle_get_request(std::string file_path, int fd){
-    std::cout<<file_path<<'\n';
     std::ifstream in(file_path, std::ifstream::ate | std::ifstream::binary);
     // get file size
     int file_size = in.tellg();
@@ -179,12 +176,13 @@ void handle_get_request(std::string file_path, int fd){
 
     //sudo:
     //-----
+    //write up to the current chunksize
+    //send it
     //while(file not fully sent)
         //reset the buffer for good measures
         //read chunk from file into buffer
         //keep writing till finished sending the chunk while()
     
-
 
     int file_bytes_sent = 0;
 
@@ -216,23 +214,6 @@ void handle_get_request(std::string file_path, int fd){
         file_bytes_sent+=actual_chunk_size;
     }
     
-
-    // while (file_bytes_sent < file_size)
-    // {
-    //     if (chunk_should_be_empty)
-    //     {
-    //         memset(chunk, 0, CHUNK_SIZE);
-    //     }
-    //     int file_bytes_to_copy = min(CHUNK_SIZE - (data_pointer_in_chunk_end - chunk), (file_size - file_bytes_sent));
-    //     in.read(data_pointer_in_chunk_end,file_bytes_to_copy);
-    //     data_pointer_in_chunk_end += file_bytes_to_copy;
-    //     int actual = write(fd, chunk, data_pointer_in_chunk_end - chunk);
-
-
-    //     file_bytes_sent += actual;
-    //     data_pointer_in_chunk_end -= actual;
-    //     chunk_should_be_empty = (data_pointer_in_chunk_end == chunk);
-    // }
     // free resources
     in.close();
     free(chunk);
@@ -320,7 +301,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         file_path = parser.argument_or_code;
         if (file_path == "/")
         {
-            std::cout<<"welcome !"<<"\n";
+            // std::cout<<"welcome !"<<"\n";
             // allocate the in-memory chunk to be sent in socket
             std::vector<std::string> msgs{};
             // write success_code

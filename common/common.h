@@ -4,7 +4,6 @@
 
 #ifndef NETWORKS_ASSIGNMENT_1_COMMON_H
 #define NETWORKS_ASSIGNMENT_1_COMMON_H
-#include <mutex>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -59,37 +58,5 @@ static char* strscpy(char* dest,std::vector<std::string> messages)
     }
     return pointer;
 }
-
-/**
- * puts amount of [size] bytes of file content into destination. 
-*/
-// static char* fcpy(char* dest,std::ifstream ifile,int size)
-// {
-//     ifile.read(dest,size);
-//     return dest+size;
-// }
-
-// static int fsize(std::ifstream ifile){
-//     ifile.seekg(std::ios::end);
-//     int file_size = ifile.tellg();
-//     ifile.seekg(std::ios::beg);
-// }
-
-
-// long long GetFileSize(std::string filename)
-// {
-//     struct stat stat_buf;
-//     int rc = stat(filename.c_str(), &stat_buf);
-//     return rc == 0 ? stat_buf.st_size : -1;
-// }
-
-
-// long long FdGetFileSize(int fd)
-// {
-//     struct stat stat_buf;
-//     int rc = fstat(fd, &stat_buf);
-//     return rc == 0 ? stat_buf.st_size : -1;
-// }
-
 
 #endif //NETWORKS_ASSIGNMENT_1_COMMON_H
