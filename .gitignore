@@ -8,3 +8,4 @@ cmake-build-debug/
 cli
 CMakeLists.txt
 cmake-build-debug/CMakeFiles/3.24.2/CompilerIdC/CMakeCCompilerId.c
+server.cpp

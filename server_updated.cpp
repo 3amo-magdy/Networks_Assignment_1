@@ -61,13 +61,14 @@ while(true):
 #include <cstring>
 #include "myHTTP.cpp"
 #include <iostream>
-#define MAX_CLIENTS 25           // max allowed number of active clients
-#define ONE_CLIENT_TIME_OUT 10.0 // the time_out duration if there's only one client connected in seconds
+#define MAX_CLIENTS 20           // max allowed number of active clients
+#define MAX_ONE_CLIENT_TIME_OUT 40.0 // the time_out duration if there's only one client connected, in seconds
+#define MIN_ONE_CLIENT_TIME_OUT 8.0 // the time_out duration if there're MAX_CLIENTS connected, in seconds
 #define CHUNK_SIZE 1024
 static const std::string error_code = "HTTP/1.1 500 Internal Server Error\r\n";
 static const std::string success_code = "HTTP/1.1 200 OK\r\n";
 static const std::string clength_header = "Content-Length: ";
-static const std::string welcome_msg("<html><body><h1>welcome to our server!</h1><br>  - Use GET <file_name> <http_version>  to retrieve a file<br>  - Use POST <file_name> <http_version>  to upload a file</body></html>\r\n");
+static const std::string welcome_msg("<html><body><h1>welcome to our server!</h1> - Use GET [file_name] [http_version]  to retrieve a file.<br>  - Use POST [file_name] [http_version]  to upload a file.</body></html>\r\n");
 static const std::string empty_line = "\r\n";
 static const std::string open_fail_err = "failed to open the file\r\n";
 static const std::string un_supported_err = "un supported command\r\n";
@@ -84,7 +85,9 @@ static int PORT = 6116;               // the port to bind & listen on
  */
 static float compute_time_out(int n)
 {
-    return ONE_CLIENT_TIME_OUT / n;
+    // return ONE_CLIENT_TIME_OUT / n;
+    return (MAX_CLIENTS - n)*((MAX_ONE_CLIENT_TIME_OUT - MIN_ONE_CLIENT_TIME_OUT) / (MAX_CLIENTS - 1));
+
 }
 
 int min(int a, int b)
@@ -191,7 +194,8 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         float duration;
         (lock)->lock();
         duration = compute_time_out(*active_connections);
-        lock->unlock();
+        std::cout<<"fd "<<fd<<" has connection duration:"<<duration<<" s\n";
+        (lock)->unlock();
         // build the timeval struct to call select
         timeval time_out{};
         time_out.tv_sec = (int)duration;
@@ -211,6 +215,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         // if time_out occurred:
         else if (can_read == 0)
         {
+            std::cout<<"fd "<< fd <<" has timed out !\n";
             lock->lock();
             *active_connections = *active_connections - 1;
             lock->unlock();
@@ -220,7 +225,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         // illegal state - must never happen -:
         if (!FD_ISSET(fd, &input))
         {
-            perror("illegal state!");
+            std::cout << ("illegal state!\n");
             exit(1);
         }
         // there's something to read:

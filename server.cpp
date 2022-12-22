@@ -75,7 +75,7 @@ static const std::string clength_header = "content-length: ";
  * @return the duration in seconds (ex: 4.324 s)
  */
 static float compute_time_out(int n) {
-    return ONE_CLIENT_TIME_OUT/n;
+    return MAX_ONE_CLIENT_TIME_OUT/n;
 }
 
 int min(int a, int b) {
