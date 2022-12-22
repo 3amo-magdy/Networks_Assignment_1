@@ -91,53 +91,69 @@ int min(int a, int b)
     return b;
 }
 
+void send_open_fail_err(int fd)
+{
+    // send open_fail error
+    std::vector<std::string> response;
+    response.push_back(error_code);
+    response.push_back(empty_line);
+    response.push_back(open_fail_err);
+    send_onto_socket(response, fd);
+    // perror("failed to open the file | executing GET");
+}
+
+
 void handle_get_request(std::string file_path, int fd){
-                std::ifstream in(file_path, std::ios::binary);
-                char *chunk = (char *)(malloc(CHUNK_SIZE));
-                if (in.fail())
-                {
-                    send_open_fail_err(fd);
-                    in.close();
-                    return;
-                }
-                std::vector<std::string> response_headers;
-                //append success code
-                response_headers.push_back(success_code);
+    std::ifstream in(file_path, std::ios::binary);
+    char *chunk = (char *)(malloc(CHUNK_SIZE));
+    if (in.fail())
+    {
+        send_open_fail_err(fd);
+        in.close();
+        return;
+    }
+    std::vector<std::string> response_headers;
+    //append success code
+    response_headers.push_back(success_code);
 
-                //append Content-Length header token
-                response_headers.push_back(clength_header);
+    //append Content-Length header token
+    response_headers.push_back(clength_header);
 
-                // write content-length value:
-                // get file size
-                int file_size = fsize(&in);
-                std::string body_size_str = std::to_string(file_size);
-                response_headers.push_back(body_size_str);
+    // write content-length value:
+    // get file size
+    in.seekg(std::ios::end);
+    int file_size = in.tellg();
+    in.seekg(std::ios::beg);
 
-                // write an empty line at end of header
-                response_headers.push_back(empty_line);
+    std::string body_size_str = std::to_string(file_size);
+    response_headers.push_back(body_size_str);
+    // write an empty line at end of header
+    response_headers.push_back(empty_line);
+    // write an empty line at end of header section
+    response_headers.push_back(empty_line);
+    
+    char* data_pointer_in_chunk = strscpy(chunk,response_headers);
 
-                // write an empty line at end of header section
-                response_headers.push_back(empty_line);
-                char* data_pointer_in_chunk = strscpy(chunk,response_headers);
+    bool chunk_should_be_empty = false;
 
-                bool chunk_should_be_empty = false;
-
-                // write file data onto chunks and keep sending chunks till the whole file is sent
-                int file_bytes_copied = 0;
-                while (file_bytes_copied < file_size && !in.eof())
-                {
-                    if (chunk_should_be_empty)
-                    {
-                        memset(chunk, 0, CHUNK_SIZE);
-                    }
-                    int file_bytes_to_copy = min(CHUNK_SIZE - (data_pointer_in_chunk - chunk), (file_size - file_bytes_copied));
-                    data_pointer_in_chunk = fcpy(data_pointer_in_chunk,&in,file_bytes_to_copy);
-                    int actual = write(fd, chunk, data_pointer_in_chunk - chunk);
-                    file_bytes_copied += actual;
-                    data_pointer_in_chunk -= actual;
-                // free resources
-                in.close();
-                free(chunk);
+    // write file data onto chunks and keep sending chunks till the whole file is sent
+    int file_bytes_copied = 0;
+    while (file_bytes_copied < file_size && !in.eof())
+    {
+        if (chunk_should_be_empty)
+        {
+            memset(chunk, 0, CHUNK_SIZE);
+        }
+        int file_bytes_to_copy = min(CHUNK_SIZE - (data_pointer_in_chunk - chunk), (file_size - file_bytes_copied));
+        in.read(data_pointer_in_chunk,file_bytes_to_copy);
+        data_pointer_in_chunk += file_bytes_to_copy;
+        int actual = write(fd, chunk, data_pointer_in_chunk - chunk);
+        file_bytes_copied += actual;
+        data_pointer_in_chunk -= actual;
+    }
+    // free resources
+    in.close();
+    free(chunk);
 }
 
 int worker(int *active_connections, int fd, std::mutex *lock)
@@ -271,8 +287,10 @@ int worker(int *active_connections, int fd, std::mutex *lock)
                     out.close();
                     continue;
                 }
+
                 // write the body of the http msg into the file
                 out.write(parser.body_start, parser.body_size);
+
                 if (out.bad())
                 {
                     // send open_fail error
@@ -281,20 +299,22 @@ int worker(int *active_connections, int fd, std::mutex *lock)
                     continue;
                 }
                 out.close();
-                // send success code
 
-                // send response
+
+                //build & send response
                 std::vector<std::string> response;
                 response.push_back(success_code);
                 response.push_back(empty_line);
                 response.push_back(file_received);
                 send_onto_socket(response, fd);
-                // perror("failed to open the file | executing GET");
+                
                 // free resources
                 free(chunk);
+                
+                //update the yet_to_read amount of bytes
+                size_to_read -= parser.body_size;
 
                 // change the mode to (downloading) if the file wasn't fully recieved:
-                size_to_read -= parser.body_size;
                 if (size_to_read > 0)
                 {
                     mode = 1;
@@ -352,17 +372,6 @@ int worker(int *active_connections, int fd, std::mutex *lock)
             out.close();
         }
     }
-}
-
-void send_open_fail_err(int fd)
-{
-    // send open_fail error
-    std::vector<std::string> response;
-    response.push_back(error_code);
-    response.push_back(empty_line);
-    response.push_back(open_fail_err);
-    send_onto_socket(response, fd);
-    // perror("failed to open the file | executing GET");
 }
 
 int main()
