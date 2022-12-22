@@ -1,7 +1,9 @@
 
-.idea/shelf/Uncommitted_changes_before_Update_at_12_20_22_2_53_PM_\[Changes\]/shelved.patch
-.idea/shelf/Uncommitted_changes_before_Update_at_12_20_22_2_53_PM__Changes_.xml
-.idea/workspace.xml
+.idea/
 *.log
 .vscode/settings.json
 .vscode/settings.json
+*.json
+cmake-build-debug/
+*.out
+cli
