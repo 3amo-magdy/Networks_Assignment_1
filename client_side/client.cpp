@@ -12,11 +12,7 @@
 #include <vector>
 #include "../common/myHTTP.cpp"
 using namespace std;
-
-#define PORT 3490       // the port client will be connecting to
-#define MAXDATASIZE 100 // max number of bytes we can get at once
 #define INPUT_FILE_PATH "input_file.txt"
-// int source_port_number = 0;
 string server_ip="";
 short server_port_number = 0;
 int socketfd=0;
@@ -26,8 +22,7 @@ typedef struct query{
     string file_path;
     string host_name;
     int port_num_used;
-    // string dest_ip_number;
-    // int dest_port_number;
+
 } query;
 vector<query> queries;
 
@@ -66,6 +61,9 @@ void validate_read_line(int numArgs, vector<string> args){
 }
 
 
+
+
+
 //              GET
 //write body to file
 // bytes still missing = size - body bytes
@@ -73,19 +71,6 @@ void validate_read_line(int numArgs, vector<string> args){
 //          keep recv until no other bytes to be read
 //          output to file
 // close all files
-
-
-
-//          POST
-//open file
-//get file size
-// content_sent = file size
-//send ->"Content-Length: # \r\n\r\n"
-// while(content length>0)
-//      read CHUNKMAX bytes from file (or less if content length<CHUNKMAX)
-//      send MAXCHUNK bytes you can send    ??? But, should I write whole buffer and depend that he will stop ? or write only bytes I wanna send
-//      content length -= MAXCHNK
-
 
 
 void process_get(query q){
@@ -152,6 +137,18 @@ void process_get(query q){
     myFile.close();
 
 }
+
+
+
+//          POST
+//open file
+//get file size
+// content_sent = file size
+//send ->"Content-Length: # \r\n\r\n"
+// while(content length>0)
+//      read CHUNKMAX bytes from file (or less if content length<CHUNKMAX)
+//      send MAXCHUNK bytes you can send    ??? But, should I write whole buffer and depend that he will stop ? or write only bytes I wanna send
+//      content length -= MAXCHNK
 
 
 void process_post(query q){
@@ -229,10 +226,6 @@ void process_post(query q){
 
 
 void process_query(query q){
-    //formulate message
-    string request;
-    if(q.get) request = "GET /"+q.file_path+" HTTP/1.1\r\n\r\n";
-    else request = "POST /"+q.file_path+" HTTP/1.1\r\n";
     if(q.get){
         process_get(q);
     }else{
@@ -245,8 +238,10 @@ void process_query(query q){
 
 int main(int argc, char** argv)
 { 
+    // the number of args in c contains ./client used so we need args -1
     int numArgs = argc-1;
 
+    //validate number of args
     if(numArgs != 2 ){
         cout<<"wrong number of args"<<endl;
         exit(1);
@@ -267,17 +262,19 @@ int main(int argc, char** argv)
         cout<<"error creating socket"<<endl;
         exit(1);
     }
+
     //setup address struct
     struct sockaddr_in serv_addr{};
-    serv_addr.sin_family=AF_INET;
+
+    serv_addr.sin_family=AF_INET; //family
     if(server_ip=="localhost"){
-        serv_addr.sin_addr.s_addr = INADDR_ANY;
+        serv_addr.sin_addr.s_addr = INADDR_ANY;  //local ip address bytes
     }
     else{
-       inet_aton(server_ip.c_str(), &(serv_addr.sin_addr));
+       inet_aton(server_ip.c_str(), &(serv_addr.sin_addr)); //convert from dot format to bytes
     }
-    serv_addr.sin_port = htons(server_port_number);
-    memset(&(serv_addr.sin_zero),'\0',8);
+    serv_addr.sin_port = htons(server_port_number); //converting port number to network byte order
+    memset(&(serv_addr.sin_zero),'\0',8);           //setting to zeros
 
     cout<<server_ip<<"\n"<<server_port_number<<endl;
 
