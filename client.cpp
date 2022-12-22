@@ -248,7 +248,6 @@ int main(int argc, char** argv)
        inet_aton(server_ip.c_str(), &(serv_addr.sin_addr));
     }
     serv_addr.sin_port = htons(server_port_number);
-
     memset(&(serv_addr.sin_zero),'\0',8);
 
     cout<<server_ip<<"\n"<<server_port_number<<endl;
@@ -306,8 +305,6 @@ int main(int argc, char** argv)
 
 
     
-
-
 
 
 
