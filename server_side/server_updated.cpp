@@ -209,6 +209,9 @@ void handle_get_request(std::string file_path, int fd){
         while (chunk_bytes_sent<actual_chunk_size)
         {
             int actual_chunk_bytes_sent = write(fd,chunk+chunk_bytes_sent,actual_chunk_size-chunk_bytes_sent);
+            if(actual_chunk_bytes_sent==0){
+                break;
+            }
             chunk_bytes_sent += actual_chunk_bytes_sent;
         }
         file_bytes_sent+=actual_chunk_size;
@@ -246,7 +249,7 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         can_read = select(fd + 1, &input, nullptr, nullptr, &time_out);
         if (can_read == -1)
         {
-            // perror("select err in worker");
+            perror("select err in worker");
             continue;
             // exit(1);
         }
@@ -271,6 +274,10 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         char *buffer = (char *)malloc(CHUNK_SIZE);
         int buffer_offset = 0;
         int buffer_size = read(fd, buffer, CHUNK_SIZE);
+        if(buffer_size==-1){
+            perror("buffer error");
+            return 0;
+        }
         if (buffer_size == 0)
         {
             // close connection
@@ -330,15 +337,14 @@ int worker(int *active_connections, int fd, std::mutex *lock)
         }
         else if (command == "POST")
         {
-            std::fstream myFile;
-            myFile.open (file_path, std::ofstream::binary | std::ofstream::out | std::ofstream::trunc);
+            std::fstream myFile(file_path, std::ofstream::binary |std::ofstream::trunc|std::ofstream::out );
             myFile.write(parser.body_start,parser.body_size);
             int bytes_missing = parser.content_length - parser.body_size;
             // cout<<"\nBYTES MISSING "<<bytes_missing<<"\n";
             // build the timeval struct to call select
-            timeval time_out{};
-            time_out.tv_sec = DURATION_BEFORE_TIME_OUT;
-            time_out.tv_usec = 0;
+            timeval time_out_duration{};
+            time_out_duration.tv_sec = DURATION_BEFORE_TIME_OUT+10 ;
+            time_out_duration.tv_usec = 1000;
             // set up the parameters for select
             fd_set client_input;
             FD_ZERO(&client_input);
@@ -346,25 +352,40 @@ int worker(int *active_connections, int fd, std::mutex *lock)
             int select_returned = -1;
             bool failed = false;
             // wait till time_out or something is there to read
-            while (bytes_missing>0)
+            char* temp_buff = (char*) malloc(CHUNK_SIZE);
+            while (bytes_missing > 0)
             {
+                time_out_duration.tv_sec = DURATION_BEFORE_TIME_OUT;
+                time_out_duration.tv_usec = 1000;
                 select_returned = select(fd + 1, &client_input, nullptr, nullptr, &time_out);
                 if(select_returned == 0){
                     failed = true;
+                    std::cout << "select returned 0 time out !";
                     break;
                 }
                 if(select_returned == -1){
                     failed = true;
+                    std::cout << "select returned -1 !";
                     break;
                 }
-                char temp_buff[CHUNK_SIZE];
+                if(!FD_ISSET(fd,&client_input)){
+                    std::cout<<"AUUUUUUUUUGH WTF"<<"\n";
+                }
                 memset(temp_buff,'\0',CHUNK_SIZE);
-                int bytes = recv(fd,temp_buff,CHUNK_SIZE,0);
+                int bytes = read(fd,temp_buff,min(CHUNK_SIZE,bytes_missing));
+                if(bytes == -1){
+                    perror("client disconnected");
+                    return 0;
+                }
                 bytes_missing-=bytes;
-                if(bytes==0) break;
+                if(bytes==0){
+                    std::cout << "read returned 0!";  
+                    break;
+                }
                 myFile.write(temp_buff,bytes);
             }
             myFile.close();
+            free(temp_buff);
             if(failed){
                 send_reading_error(fd);
                 continue;
